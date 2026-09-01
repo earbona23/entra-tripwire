@@ -68,8 +68,10 @@ vulnerability scan will never find.**
 | **2. Analyse** | [revtriage](https://github.com/earbona23/revtriage) | What did they actually do, and in what order? |
 | **3. Contain** | [containment-cut](https://github.com/earbona23/containment-cut) | What is the smallest cut that stops them without stopping the business? |
 
-Pieces 2 and 3 are **in progress and not published yet** — the links will 404 until they
-are. This repo stands on its own; the trilogy is where it is going.
+Each stands alone, and each is a separate repository with its own tests — there is no
+shared runtime, no common library and nothing to install from one to use another. What
+they share is a posture: read-only by default, dependency-light, and structurally unable
+to do the destructive thing they are near.
 
 ## Five minutes, no tenant
 
