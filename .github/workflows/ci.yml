@@ -48,16 +48,27 @@ jobs:
       - name: The module must import with no dependency installed
         shell: pwsh
         # DEMO mode is the promise that you can evaluate this tool in five minutes with
-        # nothing but PowerShell. This step is that promise as a build gate: the runner
-        # has no Microsoft.Graph module, and the whole detection and scoring path still runs.
+        # nothing but PowerShell. This step is that promise as a build gate: the whole
+        # detection and scoring path runs with the Microsoft.Graph module UNREACHABLE.
+        #
+        # This used to assert the runner simply had no Graph SDK, and it broke the day
+        # GitHub started shipping one preinstalled -- correctly, by refusing to report a
+        # green it could no longer justify. Hoping for the precondition was the mistake.
+        # Now the step CREATES it: every module directory containing the SDK is dropped
+        # from PSModulePath, and the absence is verified inside the session before the
+        # import. That is a stronger test than the original and it cannot silently rot.
         run: |
+          $kept = $env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object {
+            $_ -and -not (Test-Path (Join-Path $_ 'Microsoft.Graph.Authentication'))
+          }
+          $env:PSModulePath = $kept -join [IO.Path]::PathSeparator
           if (Get-Module -ListAvailable Microsoft.Graph.Authentication) {
-            throw 'The runner has the Graph SDK installed; this step no longer proves anything.'
+            throw 'The Graph SDK is still reachable after filtering PSModulePath; this step would not prove anything.'
           }
           Import-Module ./src/EntraTripwire/EntraTripwire.psd1 -Force
           $trips = @(Watch-TripwireActivity -Demo)
           if ($trips.Count -eq 0) { throw 'DEMO mode produced no trips.' }
-          Write-Host "DEMO mode produced $($trips.Count) scored trips with no tenant and no SDK."
+          Write-Host "DEMO mode produced $($trips.Count) scored trips with no tenant and the Graph SDK unreachable."
 
       - name: Lint
         shell: pwsh
