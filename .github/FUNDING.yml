@@ -1,5 +1,7 @@
-# entra-tripwire is free and MIT-licensed — planting decoys, watching for touches and
-# the whole confidence-scoring engine stay free. Pro (automated containment, SOAR
-# export, multi-tenant) and sponsorship keep it maintained.
+# Sponsorship keeps this maintained. The tool itself is MIT and stays free.
+#
+# Only GitHub Sponsors is listed here, deliberately. A funding button that leads to a
+# dead page is worse than no button: it asks for something and then fails the person who
+# said yes. Patreon and Polar links previously listed here pointed at accounts that do
+# not exist, so they are gone until they do.
 github: [earbona23]
-patreon: EduardArbona
