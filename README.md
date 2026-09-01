@@ -105,9 +105,9 @@ flowchart LR
     E -- yes --> F["Suppressed<br/>score 0, reason shown"]
     E -- no --> G["<b>Score</b><br/>4 weighted signals<br/>+ withheld tracking"]
     G --> H{"Band"}
-    H -- "&lt; 45" --> I["Low: logged"]
-    H -- "45-74" --> J["Medium: alert a human"]
-    H -- "&ge; 75" --> K["High: containment eligible"]
+    H -- "under 45" --> I["Low: logged"]
+    H -- "45 to 74" --> J["Medium: alert a human"]
+    H -- "75 or more" --> K["High: containment eligible"]
     K --> L["<b>Contain</b><br/>dry-run by default,<br/>5 gates, Pro to execute"]
 ```
 
