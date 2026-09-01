@@ -58,8 +58,15 @@ jobs:
         # from PSModulePath, and the absence is verified inside the session before the
         # import. That is a stronger test than the original and it cannot silently rot.
         run: |
+          # A path we cannot even stat -- the ubuntu runner carries a root-owned
+          # /root/.local/share/powershell/Modules the job user may not read -- is DROPPED,
+          # not trusted. "I could not check this directory" must never be treated as
+          # "this directory is clean", which is the same rule the module itself applies
+          # to a signal it cannot evaluate.
           $kept = $env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object {
-            $_ -and -not (Test-Path (Join-Path $_ 'Microsoft.Graph.Authentication'))
+            if (-not $_) { return $false }
+            $probe = Join-Path $_ 'Microsoft.Graph.Authentication'
+            try { -not (Test-Path -LiteralPath $probe -ErrorAction Stop) } catch { $false }
           }
           $env:PSModulePath = $kept -join [IO.Path]::PathSeparator
           if (Get-Module -ListAvailable Microsoft.Graph.Authentication) {
