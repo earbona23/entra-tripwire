@@ -89,7 +89,7 @@ Describe 'GATE 1 -- band' {
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
         $trip.Band | Should -Be 'Medium'
 
-        $result = $trip | Invoke-TripwireContainment -Execute -Confirm:$false
+        $result = $trip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
         $result.Mode | Should -Be 'DryRun'
         ($result.Blockers -join ' ') | Should -Match 'High band'
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
@@ -99,7 +99,7 @@ Describe 'GATE 1 -- band' {
         $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
         $b = New-TestBaseline -SuppressedActors @('actor-1')
         $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline $b -DistinctDecoyCount 6
-        $result = $trip | Invoke-TripwireContainment -Execute -Confirm:$false
+        $result = $trip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
         $result.Mode | Should -Be 'DryRun'
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
     }
@@ -119,7 +119,7 @@ Describe 'GATE 2 -- degraded scoring' {
         $trip.Degraded = $true
         $trip.Withheld = @('OriginAnomaly')
 
-        $result = $trip | Invoke-TripwireContainment -Execute -Confirm:$false
+        $result = $trip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
         $result.Mode | Should -Be 'DryRun'
         ($result.Blockers -join ' ') | Should -Match 'lower bound'
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
@@ -159,7 +159,7 @@ Describe 'GATE 4 -- ShouldProcess' {
 
     It 'performs nothing under -WhatIf' {
         $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
-        $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -WhatIf
+        $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -WhatIf
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
         @($result.Performed | Where-Object Status -eq 'Done').Count | Should -Be 0
     }
@@ -168,7 +168,7 @@ Describe 'GATE 4 -- ShouldProcess' {
 Describe 'GATE 5 -- Pro licence' {
 
     It 'refuses to execute without the containment feature but hands over the whole plan' {
-        $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -Confirm:$false
+        $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
         $result.Mode | Should -Be 'DryRun'
         $result.Licensed | Should -BeFalse
         ($result.Blockers -join ' ') | Should -Match 'Pro feature'
