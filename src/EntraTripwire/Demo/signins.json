@@ -1,0 +1,44 @@
+[
+  {
+    "id": "si-1",
+    "createdDateTime": "2026-06-15T03:12:00Z",
+    "userId": "u-decoy-1",
+    "userPrincipalName": "svc-backup-archive@contoso.com",
+    "userDisplayName": "svc-backup-archive",
+    "appId": "00000002-0000-0ff1-ce00-000000000000",
+    "appDisplayName": "Office 365 Exchange Online",
+    "ipAddress": "45.83.140.22",
+    "autonomousSystemNumber": "209959",
+    "status": {
+      "errorCode": 0
+    },
+    "location": {
+      "countryOrRegion": "RU",
+      "geoCoordinates": {
+        "latitude": 55.7558,
+        "longitude": 37.6173
+      }
+    }
+  },
+  {
+    "id": "si-2",
+    "createdDateTime": "2026-06-15T03:20:00Z",
+    "userId": "u-old-1",
+    "userPrincipalName": "p.morales@contoso.com",
+    "userDisplayName": "p.morales",
+    "appId": "00000002-0000-0ff1-ce00-000000000000",
+    "appDisplayName": "Office 365 Exchange Online",
+    "ipAddress": "185.220.101.9",
+    "autonomousSystemNumber": "205100",
+    "status": {
+      "errorCode": 0
+    },
+    "location": {
+      "countryOrRegion": "DE",
+      "geoCoordinates": {
+        "latitude": 50.1109,
+        "longitude": 8.6821
+      }
+    }
+  }
+]

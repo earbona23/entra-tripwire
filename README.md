@@ -1,0 +1,359 @@
+# entra-tripwire
+
+[![CI](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml/badge.svg)](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml)
+[![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
+[![Licence: MIT](https://img.shields.io/badge/Licence-MIT-blue.svg)](LICENSE)
+[![Mutation tested](https://img.shields.io/badge/mutation-17%2F17%20killed-2f855a)](docs/scoring.md#mutation-testing)
+[![Runs with no tenant](https://img.shields.io/badge/DEMO-no%20tenant%20required-0f6e6e)](#five-minutes-no-tenant)
+
+**Deception-based intrusion detection for Microsoft Entra ID.**
+
+Plant identities, application registrations and credentials that no legitimate process
+should ever touch. Watch Microsoft Graph for contact with them. When something touches one,
+score it — hard — before it reaches a human, and optionally contain the actor.
+
+Every other Entra security tool answers *how could someone get in*. This one answers a
+different question, and it is the question you have after the first one stops being
+hypothetical:
+
+> **Is someone in here right now?**
+
+```powershell
+Watch-TripwireActivity -Demo | Format-Table Confidence, Band, DecoyName, ActorLabel
+```
+
+```
+Confidence Band       DecoyName            ActorLabel
+---------- ----       ---------            ----------
+    99.600 High       svc-backup-archive   svc-backup-archive
+    74.600 Medium     p.morales            p.morales
+    74.600 Medium     admin.legacy         svc-backup-archive@contoso.com
+    74.600 Medium     sql-reporting-svc    svc-backup-archive@contoso.com
+    74.600 Medium     Legacy VPN Connector svc-backup-archive@contoso.com
+    40.300 Low        svc-backup-archive   helpdesk1@contoso.com
+    34.600 Low        hr-export            svc-backup-archive@contoso.com
+     0.000 Suppressed svc-backup-archive   admin@contoso.com
+     0.000 Suppressed admin.legacy         Contoso Vulnerability Scanner
+```
+
+That output came from the fixtures inside the module. No tenant, no credentials, no network.
+
+---
+
+## Contents
+
+- [The Active Defense Trilogy](#the-active-defense-trilogy)
+- [Five minutes, no tenant](#five-minutes-no-tenant)
+- [How it works](#how-it-works)
+- [The interesting part: the false-positive engine](#the-interesting-part-the-false-positive-engine)
+- [Reading that demo output](#reading-that-demo-output)
+- [Against a real tenant](#against-a-real-tenant)
+- [Containment](#containment)
+- [Safety properties](#safety-properties)
+- [Free vs Pro](#free-vs-pro)
+- [Development, tests and mutation testing](#development-tests-and-mutation-testing)
+- [Limitations](#limitations)
+- [Support the project](#support-the-project)
+
+---
+
+## The Active Defense Trilogy
+
+Three tools, one idea: **an intruder who is already inside leaves traces that a
+vulnerability scan will never find.**
+
+| | Tool | Question it answers |
+|---|---|---|
+| **1. Detect** | **entra-tripwire** *(this repo)* | Is someone in here right now? |
+| **2. Analyse** | [revtriage](https://github.com/earbona23/revtriage) | What did they actually do, and in what order? |
+| **3. Contain** | [containment-cut](https://github.com/earbona23/containment-cut) | What is the smallest cut that stops them without stopping the business? |
+
+Pieces 2 and 3 are **in progress and not published yet** — the links will 404 until they
+are. This repo stands on its own; the trilogy is where it is going.
+
+## Five minutes, no tenant
+
+```powershell
+git clone https://github.com/earbona23/entra-tripwire.git
+cd entra-tripwire
+Import-Module ./src/EntraTripwire/EntraTripwire.psd1
+
+# Nine scored trips from synthetic fixtures. Nothing is contacted.
+Watch-TripwireActivity -Demo | Format-Table Confidence, Band, Degraded, DecoyName, DistinctDecoys
+
+# Why did that one score 99.6?
+(Watch-TripwireActivity -Demo)[0].Signals | Format-Table Name, Raw, Weight, Available, Rationale
+
+# Write the report and open it
+Watch-TripwireActivity -Demo | Export-TripwireReport -Path ./demo.html -Demo
+```
+
+No dependency is required for any of that. `Microsoft.Graph.Authentication` is loaded lazily
+by `Connect-EntraTripwire` and only when you connect a real tenant — and CI proves it, by
+running the whole DEMO path on a runner that has no Graph SDK installed at all.
+
+There is a rendered sample at [`docs/images/sample-report.html`](docs/images/sample-report.html).
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["<b>Plant</b><br/>decoy users, apps,<br/>client secrets"] --> B["<b>Watch</b><br/>sign-in logs +<br/>directory audits"]
+    B --> C["<b>Normalise</b><br/>log records into<br/>decoy touches"]
+    C --> D["<b>Correlate</b><br/>touches per actor,<br/>per 60-min window"]
+    D --> E{"<b>Suppress?</b><br/>allowlist,<br/>provisioning grace"}
+    E -- yes --> F["Suppressed<br/>score 0, reason shown"]
+    E -- no --> G["<b>Score</b><br/>4 weighted signals<br/>+ withheld tracking"]
+    G --> H{"Band"}
+    H -- "&lt; 45" --> I["Low: logged"]
+    H -- "45-74" --> J["Medium: alert a human"]
+    H -- "&ge; 75" --> K["High: containment eligible"]
+    K --> L["<b>Contain</b><br/>dry-run by default,<br/>5 gates, Pro to execute"]
+```
+
+**What it plants.** Decoy users, decoy application registrations, and decoy client secrets.
+The decoy user's password is generated, sent to Graph and discarded — nobody, including you,
+can sign in as it. The bait is the object. `-WithSecret` is the exception: it returns a
+client secret once, on an application that holds **no API permissions**, so you can seed it
+somewhere an intruder will find it and a colleague will not.
+
+**What it watches.** Two log sources, because the two interesting behaviours look different.
+The **sign-in log** shows a decoy credential being *used*. The **directory audit log** shows
+a decoy object being *read* — and enumeration precedes use, so that is usually where it
+shows up first.
+
+**What it never does.** Contact, probe, scan or respond to the source of an intrusion. There
+is no hack-back here, and there is no code path that could grow one: see
+[Safety properties](#safety-properties).
+
+## The interesting part: the false-positive engine
+
+Deception has a wonderful signal-to-noise ratio in theory. In practice a tenant is full of
+things that walk every object in the directory — vulnerability scanners, CMDB sync, DLP
+crawlers, a helpdesk agent searching for an account, and on day one the administrator who
+just planted the decoy. A deception tool that pages on all of those gets switched off in a
+week.
+
+So every touch is scored by four weighted signals, after two hard suppression rules:
+
+| Signal | Weight | What it measures |
+|---|:--:|---|
+| **Decoy purity** | 0.40 | Has anything legitimate ever touched this decoy? Decays from 1.00 at zero recorded uses to 0.00 above ten. |
+| **Origin anomaly** | 0.25 | Unseen country (1.00), unseen ASN (0.80), rare country (0.60), rare ASN (0.50) — or **impossible travel** against the actor's last known position, which is decisive. |
+| **Cross-decoy fan-out** | 0.25 | Distinct decoys touched by the same actor in 60 minutes: 2 → 0.60, 3 → 0.85, 4+ → 1.00. Nothing legitimate walks a set of objects nothing legitimate knows exists. |
+| **Off hours** | 0.10 | This hour against **this tenant's** own 24-hour histogram. Deliberately the weakest signal: real admins work at 03:00. |
+
+Weights sum to 1.00, so confidence is a percentage of the maximum obtainable evidence.
+Bands: **High ≥ 75**, **Medium 45–74**, **Low < 45**.
+
+### Two invariants that fall out of those numbers
+
+**No single signal can reach the containment band alone.** The largest weight is 0.40, so any
+one signal tops out at 40 — well below 75. `High` means *corroborated*, not *loud*.
+
+**A contaminated decoy can never reach the containment band.** With purity at zero the
+remaining weights total 0.60. Containment cannot fire on a decoy that has stopped being a
+decoy, however anomalous the origin or however wide the sweep.
+
+Both are tested, and both are killed by mutation.
+
+### The third state: a signal that could not be evaluated
+
+A signal that cannot be computed reports **unavailable** and contributes **zero**, and the
+remaining weights are **not renormalised**. The trip is flagged `Degraded` and names what was
+withheld.
+
+That is the whole design in one rule. Renormalising would let a tenant with no baseline score
+*higher* than a tenant with one — a detector that grows more certain the less it can see. Here
+a withheld signal can only push a score **down**, a degraded score is a **floor** rather than
+a measurement, and containment refuses to act on one unless you say `-AcceptDegraded` and it
+records that you did.
+
+Full calibration, with the reasoning behind every number: **[docs/scoring.md](docs/scoring.md)**.
+
+## Reading that demo output
+
+| Score | What happened |
+|---|---|
+| **99.6 High** | A decoy service account is **used to sign in** at 03:12 UTC from a country and ASN the tenant has never used, and that principal then touches four more decoys in eight minutes. Everything corroborates. |
+| **74.6 Medium** ×3 | The same sweep seen in the **audit log**, which carries no geographic enrichment. Origin is withheld, the trips are `Degraded`, and containment refuses them — the score is a floor. |
+| **74.6 Medium** | A dormant admin account converted into a decoy signs in from Frankfurt 2h20 after New York. **Impossible travel** at ~2,660 km/h — but only one decoy, so no fan-out. A human decides. |
+| **40.3 Low** | A helpdesk agent opens a decoy in the portal on a Tuesday afternoon. |
+| **34.6 Low** | **The same sweep, on the one contaminated decoy.** Same actor, same minute, same fan-out — and 40 points lower, because `hr-export` has 14 recorded legitimate uses. This row is the engine's entire thesis. |
+| **0 Suppressed** | The admin who planted the decoy, two minutes after planting it. |
+| **0 Suppressed** | The tenant's own vulnerability scanner, sweeping at 04:00 as it does every night. |
+
+Suppressed trips are still returned and still shown, with their reason. A suppression rule
+that *hides* evidence is indistinguishable from a bug that *loses* it.
+
+## Against a real tenant
+
+```powershell
+Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
+
+# Detection only: two read scopes, no write consent is requested.
+Connect-EntraTripwire -TenantId contoso.onmicrosoft.com -Mode Detect
+Get-TripwireBaseline -Build -Days 30 -Save
+
+# Planting needs write consent, so it is a separate mode.
+Connect-EntraTripwire -TenantId contoso.onmicrosoft.com -Mode Plant
+New-TripwireDecoy -Type User -DisplayName 'svc-backup-archive' `
+                  -UserPrincipalName 'svc-backup-archive@contoso.com' -WhatIf
+New-TripwireDecoy -Type Application -DisplayName 'Legacy VPN Connector' -WithSecret
+
+# Convert a real dormant account into a decoy without creating or changing anything.
+New-TripwireDecoy -Type User -DisplayName 'p.morales' -ObjectId <id> -RegisterOnly
+
+Watch-TripwireActivity -Days 1 | Export-TripwireReport -Path ./tripwire.html
+```
+
+Scopes per mode, and why each one: **[docs/permissions.md](docs/permissions.md)**.
+How to name and seed decoys so they actually get taken: **[docs/deception-design.md](docs/deception-design.md)**.
+
+Before you turn on alerting, run it for a few days and put your own scanners into
+`baseline.suppressedActors`. A deception deployment that pages five times in its first week
+gets muted, and a muted detector is worse than no detector because everyone believes it is on.
+
+## Containment
+
+Free installations get the **plan**. It names every action, its exact Graph call and its
+parameters, so it can be run by hand:
+
+```powershell
+Watch-TripwireActivity | Where-Object Band -eq 'High' | Invoke-TripwireContainment
+```
+
+Executing it is Pro. Five gates must all be open before a single write is issued:
+
+1. the trip is in the **High** band — Medium is an alert, never an action;
+2. the trip is **not degraded** — acting on a floor means acting on a number you know is incomplete;
+3. **`-Execute`** was passed — the default is a dry run, and no setting changes that default;
+4. **`ShouldProcess`** confirmed, so `-WhatIf` and `-Confirm` behave as expected;
+5. the **`containment`** feature is licensed.
+
+At most it revokes the actor's refresh tokens, disables the decoy whose credential was used,
+and writes an incident capture to disk. A decoy that was merely *read* is not disabled —
+that would only tell the intruder they were seen.
+
+## Safety properties
+
+These are structural, and each has a test that fails the build if it stops being true.
+
+- **Two ways to reach Graph, and only two.** `Invoke-MgGraphRequest` appears in exactly two
+  files. The read gateway has no `-Method` and no `-Body` parameter and hardcodes `GET`.
+- **The write surface is eight enumerated operations.** Anything else throws before a request
+  is issued.
+- **The gateway can disable an identity and is structurally incapable of enabling one.** The
+  only permitted PATCH body is `{"accountEnabled": false}` — an extra property or a `true`
+  is refused.
+- **Nothing grants privilege.** No role assignment, app role assignment, consent grant, group
+  membership, authentication method or key is on the allowlist. Each is asserted refused by name.
+- **`Remove-TripwireDecoy` will only delete objects it recorded as decoys.** A typo or a
+  copied GUID cannot become a deleted employee.
+- **No network probe aimed at an observed address.** No `Test-NetConnection`, no `TcpClient`,
+  no `Start-Process`. The only non-Graph outbound call in the module is the operator-supplied
+  SOAR webhook.
+- **The decoy password is never returned or stored.** Asserted against both the returned
+  object and the inventory file.
+- **Blind runs announce themselves.** An empty inventory warns *"this is a blind run, not a
+  quiet tenant"*; a missing baseline warns that signals will be withheld; a corrupt state file
+  throws rather than being read as empty.
+
+## Free vs Pro
+
+| | Free (MIT) | Pro |
+|---|:--:|:--:|
+| Plant decoys, watch logs, the whole scoring engine | yes | yes |
+| Baseline, impossible travel, cross-decoy correlation | yes | yes |
+| DEMO mode, HTML report, JSON export | yes | yes |
+| Containment **plan**, with every Graph call spelled out | yes | yes |
+| Containment **execution** | — | yes |
+| SOAR / SIEM: JSONL export and webhook dispatch | — | yes |
+| Multiple tenant profiles | — | yes |
+
+Nothing the module *detects* is behind the licence: a free installation sees exactly what a
+Pro one sees and scores it identically. The licence is an ECDSA P-256 token verified
+**entirely offline** — no account, no activation server, no telemetry.
+
+```powershell
+Enable-TripwirePro -LicenseKey 'TRIPWIRE-xxxxx.yyyyy'   # verified locally, nothing phones home
+Get-TripwireLicense
+```
+
+Details: **[docs/PRO.md](docs/PRO.md)**.
+
+## Development, tests and mutation testing
+
+```powershell
+Install-Module Pester, PSScriptAnalyzer -Scope CurrentUser
+
+Invoke-Pester ./tests -Output Detailed
+Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+pwsh ./scripts/mutation-test.ps1
+```
+
+**119 tests across seven files.** The Graph gateways are stubbed, so every code path runs for
+real against simulated responses — including the paths where the engine must refuse to draw a
+conclusion.
+
+A green suite proves the tests ran. It does not prove they would notice if the engine were
+wrong, so `scripts/mutation-test.ps1` introduces one real defect at a time and requires the
+suite to go red.
+
+**17 mutants, 17 killed, 0 survived, 0 not applied.**
+
+It reports three outcomes, not two: `Killed`, `SURVIVED`, and `NOT APPLIED`. The third exists
+because a mutation that silently fails to apply produces a green run that is identical to a
+surviving mutant — identical in the flattering direction, since the harness would otherwise
+report "killed" for a defect it never introduced. Every edit is checked against file contents
+before and after, and a mutation that does not apply fails the run.
+
+Two mutants survived the first run, and are the reason two tests exist that otherwise would
+not:
+
+| Survivor | The hole it exposed |
+|---|---|
+| `withheld-still-counts` | Every caller happened to pass `Raw = 0` with `Available = $false`, so "unavailable contributes zero" was never actually exercised. |
+| `band-boundary` (`-ge` → `-gt`) | No test produced a score of exactly 75, so the inclusivity of the threshold was undefended. |
+
+CI runs lint and tests on ubuntu and windows, plus the mutation job, on every push and pull
+request. It also asserts that DEMO mode works on a runner with no Graph SDK installed.
+
+## Limitations
+
+Stated plainly, because a detector that oversells its coverage is worse than one that does not.
+
+- **Detection is as fresh as the log.** Entra sign-in and audit logs are not real time;
+  latency of a few minutes is normal. This is a detector, not a blocker.
+- **Retention is 30 days** on most licences, and sign-in log access requires Entra ID P1 or
+  P2. Without it, `Get-TripwireBaseline -Build` returns zero sign-ins — and says so loudly,
+  because a baseline of zero is not a quiet tenant.
+- **Directory audits carry no geographic enrichment.** Touches from that source always have
+  the origin signal withheld and are marked degraded. That is honest, not a bug, but it means
+  audit-only detections rarely reach the High band on their own.
+- **Directory audits are fetched by time window and matched client-side.** Graph's `$filter`
+  on `targetResources` cannot express "any of these N objects", and a server-side filter that
+  silently dropped a decoy would be worse than reading a few more pages.
+- **`legitimateUseCount` is maintained by you.** It is deliberately not inferred from the
+  logs, because inferring it would let an attacker lower a decoy's score by touching it.
+- **Impossible travel needs history**, so it only applies to decoys registered from existing
+  accounts, not to freshly planted ones.
+- **The confidence score is not a probability.** It is a weighted percentage of obtainable
+  evidence, calibrated by argument rather than by a labelled dataset. The reasoning behind
+  every number is in [docs/scoring.md](docs/scoring.md) so you can disagree with it
+  specifically.
+
+## Support the project
+
+entra-tripwire is free and MIT-licensed, and everything that detects stays free — planting,
+watching, the whole confidence engine, the report, and the full containment plan.
+
+- **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** or **[back it on Patreon](https://www.patreon.com/EduardArbona)** — any amount.
+- **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
+  multi-tenant, under an offline ECDSA licence. Built for teams who live in this module.
+
+## Licence
+
+[MIT](LICENSE).
+
+Provided as-is. Plant decoys only in a tenant you are authorised to administer.

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EntraTripwire report</title>
+<style>
+:root{color-scheme:light dark;--bg:#0f1115;--fg:#e6e8ee;--mut:#9aa3b2;--card:#171a21;--line:#252a34;
+--hi:#ff5d5d;--md:#ffb020;--lo:#4a9eff;--sp:#6b7280}
+@media (prefers-color-scheme:light){:root{--bg:#f7f8fa;--fg:#12151b;--mut:#5b6472;--card:#fff;--line:#e3e6ec}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:28px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin-bottom:18px}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:110px}
+.c .n{font-size:22px;font-weight:600}.c .l{color:var(--mut);font-size:12px}
+.demo{background:#1d3a5f;color:#cfe4ff;border-radius:8px;padding:10px 14px;margin-bottom:14px}
+.warn{background:#4a3410;color:#ffd9a0;border-radius:8px;padding:10px 14px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+td{padding:12px 14px;border-top:1px solid var(--line);vertical-align:top}
+tr:first-child td{border-top:none}
+.score{width:96px;text-align:center}
+.pill{display:inline-block;min-width:44px;padding:4px 8px;border-radius:999px;font-weight:700;color:#0b0d11;background:var(--sp)}
+.band-high .pill{background:var(--hi)}.band-medium .pill{background:var(--md)}.band-low .pill{background:var(--lo)}
+.band{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.hdr{font-weight:600}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut);font-size:12px}
+.meta,.cov{color:var(--mut);font-size:12px}.cov{font-style:italic}
+.sup{color:var(--mut);font-size:12px;margin-top:4px}
+ul.signals{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+ul.signals li{border-left:2px solid var(--line);padding-left:8px;font-size:12px}
+.w,.r{color:var(--mut);font-size:11px}.why{color:var(--mut)}
+footer{color:var(--mut);font-size:12px;margin-top:18px}
+</style></head><body>
+<h1>EntraTripwire &mdash; decoy activity</h1>
+<div class="sub">contoso.onmicrosoft.com (synthetic fixtures) &middot; generated 2026-09-01 17:04:38Z</div>
+<div class="demo">DEMO MODE &mdash; every trip below was scored from the synthetic fixtures shipped with the module. No tenant was contacted.</div>
+<div class="warn">5 trip(s) were scored with at least one signal withheld. Their confidence is a FLOOR, not a measurement &mdash; a withheld signal contributes zero and can only push a score down.</div>
+<div class="cards">
+  <div class="c"><div class="n">1</div><div class="l">High confidence</div></div>
+  <div class="c"><div class="n">4</div><div class="l">Medium</div></div>
+  <div class="c"><div class="n">2</div><div class="l">Low</div></div>
+  <div class="c"><div class="n">2</div><div class="l">Suppressed</div></div>
+  <div class="c"><div class="n">5</div><div class="l">Scored degraded</div></div>
+</div>
+<table><tr class="band-high">
+  <td class="score"><span class="pill">100</span><br><span class="band">High</span></td>
+  <td>
+    <div class="hdr">svc-backup-archive <span class="mono">Sign-in to Office 365 Exchange Online</span></div>
+    <div class="meta">2026-06-15 03:12:00Z &middot; actor svc-backup-archive &middot; 45.83.140.22 RU &middot; SignInLog</div>
+    <div class="cov">all signals evaluated</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;svc-backup-archive&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">Country &#39;RU&#39; has never appeared in 7313 baseline sign-ins.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">5 distinct decoys were touched by the same actor inside the correlation window -- consistent with enumeration.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-medium">
+  <td class="score"><span class="pill">75</span><br><span class="band">Medium</span></td>
+  <td>
+    <div class="hdr">p.morales <span class="mono">Sign-in to Office 365 Exchange Online</span></div>
+    <div class="meta">2026-06-15 03:20:00Z &middot; actor p.morales &middot; 185.220.101.9 DE &middot; SignInLog</div>
+    <div class="cov">all signals evaluated</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;p.morales&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">Impossible travel: 6203 km from the previous sign-in in 2.33 h implies at least 2658 km/h (limit 900).</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">0%</span><br><span class="why">A single decoy was touched by this actor inside the correlation window; no fan-out.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-medium">
+  <td class="score"><span class="pill">75</span><br><span class="band">Medium</span></td>
+  <td>
+    <div class="hdr">admin.legacy <span class="mono">Update user</span></div>
+    <div class="meta">2026-06-15 03:14:00Z &middot; actor svc-backup-archive@contoso.com &middot; 45.83.140.22  &middot; DirectoryAudit</div>
+    <div class="cov">withheld: OriginAnomaly</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;admin.legacy&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">n/a</span><br><span class="why">This log source carries no country or autonomous-system enrichment, so the origin cannot be compared with the tenant baseline.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">5 distinct decoys were touched by the same actor inside the correlation window -- consistent with enumeration.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-medium">
+  <td class="score"><span class="pill">75</span><br><span class="band">Medium</span></td>
+  <td>
+    <div class="hdr">sql-reporting-svc <span class="mono">Update user</span></div>
+    <div class="meta">2026-06-15 03:16:00Z &middot; actor svc-backup-archive@contoso.com &middot; 45.83.140.22  &middot; DirectoryAudit</div>
+    <div class="cov">withheld: OriginAnomaly</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;sql-reporting-svc&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">n/a</span><br><span class="why">This log source carries no country or autonomous-system enrichment, so the origin cannot be compared with the tenant baseline.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">5 distinct decoys were touched by the same actor inside the correlation window -- consistent with enumeration.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-medium">
+  <td class="score"><span class="pill">75</span><br><span class="band">Medium</span></td>
+  <td>
+    <div class="hdr">Legacy VPN Connector <span class="mono">Update application</span></div>
+    <div class="meta">2026-06-15 03:18:00Z &middot; actor svc-backup-archive@contoso.com &middot; 45.83.140.22  &middot; DirectoryAudit</div>
+    <div class="cov">withheld: OriginAnomaly</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;Legacy VPN Connector&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">n/a</span><br><span class="why">This log source carries no country or autonomous-system enrichment, so the origin cannot be compared with the tenant baseline.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">5 distinct decoys were touched by the same actor inside the correlation window -- consistent with enumeration.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-low">
+  <td class="score"><span class="pill">40</span><br><span class="band">Low</span></td>
+  <td>
+    <div class="hdr">svc-backup-archive <span class="mono">Update user</span></div>
+    <div class="meta">2026-06-14 15:10:00Z &middot; actor helpdesk1@contoso.com &middot; 198.51.100.7  &middot; DirectoryAudit</div>
+    <div class="cov">withheld: OriginAnomaly</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">100%</span><br><span class="why">Decoy &#39;svc-backup-archive&#39; has no recorded legitimate use since it was planted.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">n/a</span><br><span class="why">This log source carries no country or autonomous-system enrichment, so the origin cannot be compared with the tenant baseline.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">0%</span><br><span class="why">A single decoy was touched by this actor inside the correlation window; no fan-out.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">3%</span><br><span class="why">15:00 UTC runs at 97% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-low">
+  <td class="score"><span class="pill">35</span><br><span class="band">Low</span></td>
+  <td>
+    <div class="hdr">hr-export <span class="mono">Update user</span></div>
+    <div class="meta">2026-06-15 03:19:00Z &middot; actor svc-backup-archive@contoso.com &middot; 45.83.140.22  &middot; DirectoryAudit</div>
+    <div class="cov">withheld: OriginAnomaly</div>
+    
+    <ul class="signals"><li><b>DecoyPurity</b> <span class="w">x0.4</span> <span class="r">0%</span><br><span class="why">Decoy &#39;hr-export&#39; has 14 recorded legitimate uses. It is contaminated and carries no evidential weight; re-plant it.</span></li><li><b>OriginAnomaly</b> <span class="w">x0.25</span> <span class="r">n/a</span><br><span class="why">This log source carries no country or autonomous-system enrichment, so the origin cannot be compared with the tenant baseline.</span></li><li><b>CrossDecoyFanOut</b> <span class="w">x0.25</span> <span class="r">100%</span><br><span class="why">5 distinct decoys were touched by the same actor inside the correlation window -- consistent with enumeration.</span></li><li><b>OffHours</b> <span class="w">x0.1</span> <span class="r">96%</span><br><span class="why">03:00 UTC runs at 4% of this tenant&#39;s busiest hour.</span></li></ul>
+  </td>
+</tr><tr class="band-suppressed">
+  <td class="score"><span class="pill">0</span><br><span class="band">Suppressed</span></td>
+  <td>
+    <div class="hdr">svc-backup-archive <span class="mono">Add user</span></div>
+    <div class="meta">2026-06-01 09:02:00Z &middot; actor admin@contoso.com &middot; 203.0.113.10  &middot; DirectoryAudit</div>
+    <div class="cov">all signals evaluated</div>
+    <div class="sup">Suppressed: Within the 15-minute provisioning window and performed by the planter (admin@contoso.com).</div>
+    <ul class="signals"></ul>
+  </td>
+</tr><tr class="band-suppressed">
+  <td class="score"><span class="pill">0</span><br><span class="band">Suppressed</span></td>
+  <td>
+    <div class="hdr">admin.legacy <span class="mono">Update user</span></div>
+    <div class="meta">2026-06-14 04:00:00Z &middot; actor Contoso Vulnerability Scanner &middot;   &middot; DirectoryAudit</div>
+    <div class="cov">all signals evaluated</div>
+    <div class="sup">Suppressed: Actor sp-scanner-0001 is on the tenant suppression allowlist.</div>
+    <ul class="signals"></ul>
+  </td>
+</tr></table>
+<footer>Confidence is a weighted score, not a probability. A withheld signal contributes zero, so a
+degraded score is a lower bound. Containment is never eligible below the High band.</footer>
+</body></html>

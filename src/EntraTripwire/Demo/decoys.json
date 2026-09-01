@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "decoys": [
+    {
+      "id": "decoy-svc-backup",
+      "type": "User",
+      "objectId": "u-decoy-1",
+      "appId": null,
+      "displayName": "svc-backup-archive",
+      "upn": "svc-backup-archive@contoso.com",
+      "plantedAt": "2026-06-01T09:00:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 0,
+      "note": "Named to look like a backup service account. Credential seeded in a stale wiki page."
+    },
+    {
+      "id": "decoy-admin-legacy",
+      "type": "User",
+      "objectId": "u-decoy-2",
+      "appId": null,
+      "displayName": "admin.legacy",
+      "upn": "admin.legacy@contoso.com",
+      "plantedAt": "2026-06-01T09:00:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 0,
+      "note": "Bait for anyone listing accounts whose name contains 'admin'."
+    },
+    {
+      "id": "decoy-sql-reporting",
+      "type": "User",
+      "objectId": "u-decoy-3",
+      "appId": null,
+      "displayName": "sql-reporting-svc",
+      "upn": "sql-reporting-svc@contoso.com",
+      "plantedAt": "2026-06-01T09:00:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 0,
+      "note": "Bait for service-account enumeration."
+    },
+    {
+      "id": "decoy-vpn-app",
+      "type": "Application",
+      "objectId": "a-decoy-1",
+      "appId": "11111111-2222-3333-4444-555555555555",
+      "displayName": "Legacy VPN Connector",
+      "upn": null,
+      "plantedAt": "2026-06-01T09:05:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 0,
+      "note": "Application registration with NO API permissions. Its client secret was seeded in a decommissioned config file."
+    },
+    {
+      "id": "decoy-hr-export",
+      "type": "User",
+      "objectId": "u-decoy-4",
+      "appId": null,
+      "displayName": "hr-export",
+      "upn": "hr-export@contoso.com",
+      "plantedAt": "2026-06-01T09:00:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 14,
+      "note": "CONTAMINATED: an HR reporting job started resolving this name in April. Kept in the fixtures on purpose -- watch what its purity signal does to a touch that is otherwise identical to the others."
+    },
+    {
+      "id": "decoy-old-admin",
+      "type": "User",
+      "objectId": "u-old-1",
+      "appId": null,
+      "displayName": "p.morales",
+      "upn": "p.morales@contoso.com",
+      "plantedAt": "2026-05-20T12:00:00Z",
+      "plantedBy": "admin@contoso.com",
+      "legitimateUseCount": 0,
+      "note": "A real dormant administrator account converted into a decoy with -RegisterOnly. It keeps its sign-in history, which is why impossible travel can be evaluated for it and not for the freshly planted decoys."
+    }
+  ]
+}

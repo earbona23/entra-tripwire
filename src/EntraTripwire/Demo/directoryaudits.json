@@ -1,0 +1,148 @@
+[
+  {
+    "id": "da-1",
+    "activityDateTime": "2026-06-01T09:02:00Z",
+    "activityDisplayName": "Add user",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "u-admin-1",
+        "userPrincipalName": "admin@contoso.com",
+        "ipAddress": "203.0.113.10"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-1",
+        "type": "User",
+        "displayName": "svc-backup-archive",
+        "userPrincipalName": "svc-backup-archive@contoso.com"
+      }
+    ]
+  },
+  {
+    "id": "da-2",
+    "activityDateTime": "2026-06-14T04:00:00Z",
+    "activityDisplayName": "Update user",
+    "result": "success",
+    "initiatedBy": {
+      "app": {
+        "servicePrincipalId": "sp-scanner-0001",
+        "displayName": "Contoso Vulnerability Scanner"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-2",
+        "type": "User",
+        "displayName": "admin.legacy",
+        "userPrincipalName": "admin.legacy@contoso.com"
+      }
+    ]
+  },
+  {
+    "id": "da-3",
+    "activityDateTime": "2026-06-14T15:10:00Z",
+    "activityDisplayName": "Update user",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "h-0001",
+        "userPrincipalName": "helpdesk1@contoso.com",
+        "ipAddress": "198.51.100.7"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-1",
+        "type": "User",
+        "displayName": "svc-backup-archive",
+        "userPrincipalName": "svc-backup-archive@contoso.com"
+      }
+    ]
+  },
+  {
+    "id": "da-4",
+    "activityDateTime": "2026-06-15T03:14:00Z",
+    "activityDisplayName": "Update user",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "u-decoy-1",
+        "userPrincipalName": "svc-backup-archive@contoso.com",
+        "ipAddress": "45.83.140.22"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-2",
+        "type": "User",
+        "displayName": "admin.legacy",
+        "userPrincipalName": "admin.legacy@contoso.com"
+      }
+    ]
+  },
+  {
+    "id": "da-5",
+    "activityDateTime": "2026-06-15T03:16:00Z",
+    "activityDisplayName": "Update user",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "u-decoy-1",
+        "userPrincipalName": "svc-backup-archive@contoso.com",
+        "ipAddress": "45.83.140.22"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-3",
+        "type": "User",
+        "displayName": "sql-reporting-svc",
+        "userPrincipalName": "sql-reporting-svc@contoso.com"
+      }
+    ]
+  },
+  {
+    "id": "da-6",
+    "activityDateTime": "2026-06-15T03:18:00Z",
+    "activityDisplayName": "Update application",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "u-decoy-1",
+        "userPrincipalName": "svc-backup-archive@contoso.com",
+        "ipAddress": "45.83.140.22"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "a-decoy-1",
+        "type": "Application",
+        "displayName": "Legacy VPN Connector",
+        "userPrincipalName": null
+      }
+    ]
+  },
+  {
+    "id": "da-7",
+    "activityDateTime": "2026-06-15T03:19:00Z",
+    "activityDisplayName": "Update user",
+    "result": "success",
+    "initiatedBy": {
+      "user": {
+        "id": "u-decoy-1",
+        "userPrincipalName": "svc-backup-archive@contoso.com",
+        "ipAddress": "45.83.140.22"
+      }
+    },
+    "targetResources": [
+      {
+        "id": "u-decoy-4",
+        "type": "User",
+        "displayName": "hr-export",
+        "userPrincipalName": "hr-export@contoso.com"
+      }
+    ]
+  }
+]

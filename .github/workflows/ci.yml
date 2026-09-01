@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache PowerShell modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/powershell/Modules
+            ~/Documents/PowerShell/Modules
+          key: psmodules-${{ matrix.os }}-pester-analyzer
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          foreach ($m in 'Pester', 'PSScriptAnalyzer') {
+            if (-not (Get-Module -ListAvailable $m)) {
+              Install-Module $m -Scope CurrentUser -Force -SkipPublisherCheck
+            }
+          }
+          Get-Module -ListAvailable Pester, PSScriptAnalyzer | Select-Object Name, Version | Format-Table
+
+      - name: Validate the module manifest
+        shell: pwsh
+        run: Test-ModuleManifest ./src/EntraTripwire/EntraTripwire.psd1
+
+      - name: The module must import with no dependency installed
+        shell: pwsh
+        # DEMO mode is the promise that you can evaluate this tool in five minutes with
+        # nothing but PowerShell. This step is that promise as a build gate: the runner
+        # has no Microsoft.Graph module, and the whole detection and scoring path still runs.
+        run: |
+          if (Get-Module -ListAvailable Microsoft.Graph.Authentication) {
+            throw 'The runner has the Graph SDK installed; this step no longer proves anything.'
+          }
+          Import-Module ./src/EntraTripwire/EntraTripwire.psd1 -Force
+          $trips = @(Watch-TripwireActivity -Demo)
+          if ($trips.Count -eq 0) { throw 'DEMO mode produced no trips.' }
+          Write-Host "DEMO mode produced $($trips.Count) scored trips with no tenant and no SDK."
+
+      - name: Lint
+        shell: pwsh
+        run: |
+          $findings = @()
+          $findings += Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          $findings += Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Settings ./PSScriptAnalyzerSettings.Scripts.psd1
+          $findings += Invoke-ScriptAnalyzer -Path ./samples -Recurse -Settings ./PSScriptAnalyzerSettings.Scripts.psd1
+          if ($findings) {
+            $findings | Format-Table -AutoSize | Out-String | Write-Host
+            throw "PSScriptAnalyzer reported $($findings.Count) issue(s)."
+          }
+          Write-Host 'PSScriptAnalyzer: clean'
+
+      - name: Test
+        shell: pwsh
+        env:
+          ENTRATRIPWIRE_CONFIG_DIR: ${{ runner.temp }}/entra-tripwire-config
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = './TestResults.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: ./TestResults.xml
+          if-no-files-found: ignore
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-Module -ListAvailable Pester)) {
+            Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+
+      - name: Every mutant must be applied and killed
+        shell: pwsh
+        # A green suite proves the tests ran, not that they would notice a defect. This job
+        # introduces one real defect at a time and fails if the suite stays green -- or if a
+        # mutation silently failed to apply, which looks identical to a killed mutant.
+        run: pwsh -NoProfile -File ./scripts/mutation-test.ps1

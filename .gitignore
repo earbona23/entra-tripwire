@@ -1,0 +1,40 @@
+# License SIGNING key — never commit. Only the embedded public key ships, and it
+# can verify a signature but never mint one.
+.secrets/
+
+# Incident captures and reports. These contain attacker context AND tenant data
+# (user principal names, object ids, source addresses) and must never be
+# committed by accident.
+incidents/
+reports/
+out/
+*-tripwire-report.html
+*-trips.json
+*-trips.jsonl
+
+# Local tenant configuration and credentials
+*.env
+.env
+settings.local.json
+*.pfx
+*.cer
+*.key
+tokencache*.bin
+
+# PowerShell / test output
+*.psd1.bak
+publish/
+TestResults*.xml
+coverage.xml
+.mutation-work/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
