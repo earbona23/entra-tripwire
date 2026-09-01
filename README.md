@@ -43,6 +43,7 @@ That output came from the fixtures inside the module. No tenant, no credentials,
 ## Contents
 
 - [The Active Defense Trilogy](#the-active-defense-trilogy)
+- [When you would actually reach for this](#when-you-would-actually-reach-for-this)
 - [Five minutes, no tenant](#five-minutes-no-tenant)
 - [How it works](#how-it-works)
 - [The interesting part: the false-positive engine](#the-interesting-part-the-false-positive-engine)
@@ -72,6 +73,45 @@ Each stands alone, and each is a separate repository with its own tests — ther
 shared runtime, no common library and nothing to install from one to use another. What
 they share is a posture: read-only by default, dependency-light, and structurally unable
 to do the destructive thing they are near.
+
+## When you would actually reach for this
+
+Deception is the cheapest high-signal detection a small team can run, and it is the only
+one that gets *better* the quieter your tenant is. Concrete moments where it earns its
+place:
+
+**The week after an incident.** You evicted them. Did they come back? Plant decoys shaped
+like whatever they touched last time — the service account naming convention they went
+for, an app registration with a secret, the dormant admin they found. If the same tradecraft
+runs again, it lands on a decoy first, and you find out on day one instead of day ninety.
+
+**A tenant with no SOC.** Two hundred users, one IT person, no budget for a detection
+engineer. You cannot write behavioural analytics. You *can* plant nine objects nothing
+legitimate touches and page a human when something does. The false-positive engine exists
+precisely so the one IT person does not switch it off in week two.
+
+**Before a red team engagement, not after.** Plant the decoys, tell nobody, and use the
+report as the scoreboard. If the red team walks the directory and never trips one, your
+decoys are badly placed — which is a finding you got for free, before the real thing.
+
+**A privileged admin is leaving.** You cannot watch everything they know. You can convert
+a dormant admin account into a decoy with `-RegisterOnly`, which creates nothing and
+changes nothing, and know if the credentials they remember get used.
+
+**After a password spray or a leaked credential dump.** Enumeration precedes use. A decoy
+being *read* in the audit log is the earliest signal there is — earlier than a sign-in,
+because an attacker looks before they touch.
+
+**Seeding, not just planting.** A decoy nobody can find catches nobody. Put the client
+secret in the place your organisation actually leaks them: a Confluence page, an old
+repository, a shared drive folder called `scripts`. Anyone who reads that page has no
+legitimate reason to authenticate with what is in it.
+[docs/deception-design.md](docs/deception-design.md) is the whole argument.
+
+**When it is the wrong tool:** you need coverage of *known* attack techniques (use
+detection rules), you have no Entra ID P1/P2 so there are no sign-in logs to read, or you
+want prevention rather than detection. This catches an intruder who is already inside. It
+prevents nothing.
 
 ## Five minutes, no tenant
 
