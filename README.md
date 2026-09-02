@@ -1,5 +1,7 @@
 # entra-tripwire
 
+> 🔎 **Try this and the whole suite online — no install:** [consulting.arrankago.com](https://consulting.arrankago.com) · plus managed security and M365/Entra identity assessments for teams.
+
 [![CI](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml/badge.svg)](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml)
 [![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-blue.svg)](LICENSE)
