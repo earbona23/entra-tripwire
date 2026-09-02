@@ -60,3 +60,15 @@ must confirm, and the `containment` feature must be licensed. See
 At most it revokes the actor's refresh tokens, disables the decoy whose credential was used,
 and writes an incident capture to disk. It never contacts, probes or responds to the source
 of the intrusion — the write allowlist has no entry that could.
+## Pricing
+
+Per organisation, unlimited seats. The licence is a signed file, verified offline — no
+account, no phone-home.
+
+| | Monthly | Annual (two months free) |
+|---|:--:|:--:|
+| This tool, Pro | US$29 | US$290 |
+| All three tools (revtriage · EntraTripwire · containment-cut) | US$69 | US$690 |
+
+To buy, email **earbona@arrankago.com** with the name to put on the licence. You get the
+key by return email, usually the same day.
