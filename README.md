@@ -394,6 +394,15 @@ watching, the whole confidence engine, the report, and the full containment plan
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
   multi-tenant, under an offline ECDSA licence. Built for teams who live in this module.
 
+## More tools like this
+
+Part of a small suite of dependency-free security tools I maintain. Each one runs
+offline, ships its own tests, and maps its detections to MITRE ATT&CK.
+
+- **[entraform](https://github.com/earbona23/entraform)** — catch risky Entra/Azure changes in a Terraform plan, before apply.
+- **[revtriage](https://github.com/earbona23/revtriage)** — offline malware triage: an explainable score and a STIX bundle from a suspicious file.
+- **[containment-cut](https://github.com/earbona23/containment-cut)** — the minimum-cost set of actions that provably severs a compromised identity, with a proof.
+
 ## Licence
 
 [MIT](LICENSE).
