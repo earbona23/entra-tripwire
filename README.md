@@ -390,7 +390,7 @@ Stated plainly, because a detector that oversells its coverage is worse than one
 entra-tripwire is free and MIT-licensed, and everything that detects stays free — planting,
 watching, the whole confidence engine, the report, and the full containment plan.
 
-- **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** or **[back it on Patreon](https://www.patreon.com/EduardArbona)** — any amount.
+- **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** — any amount.
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
   multi-tenant, under an offline ECDSA licence. Built for teams who live in this module.
 
