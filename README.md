@@ -392,7 +392,7 @@ watching, the whole confidence engine, the report, and the full containment plan
 
 - **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** — any amount.
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
-  multi-tenant, under an offline ECDSA licence. Built for teams who live in this module. From US$29/mo per org — [pricing](docs/PRO.md#pricing). From US$29/mo per org — [pricing](docs/PRO.md#pricing).
+  multi-tenant, under an offline ECDSA licence. Built for teams who live in this module. From US$29/mo per org — [pricing](docs/PRO.md#pricing).
 
 ## More tools like this
 
