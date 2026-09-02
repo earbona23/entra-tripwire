@@ -399,6 +399,7 @@ watching, the whole confidence engine, the report, and the full containment plan
 Part of a small suite of dependency-free security tools I maintain. Each one runs
 offline, ships its own tests, and maps its detections to MITRE ATT&CK.
 
+- **[vantage](https://github.com/earbona23/vantage)** — see your domain's external attack surface the way an attacker's first recon does, scored and explained.
 - **[entraform](https://github.com/earbona23/entraform)** — catch risky Entra/Azure changes in a Terraform plan, before apply.
 - **[revtriage](https://github.com/earbona23/revtriage)** — offline malware triage: an explainable score and a STIX bundle from a suspicious file.
 - **[containment-cut](https://github.com/earbona23/containment-cut)** — the minimum-cost set of actions that provably severs a compromised identity, with a proof.
