@@ -7,6 +7,8 @@
 > 🔎 **Try this and the whole suite online — no install:** [consulting.arrankago.com](https://consulting.arrankago.com) · plus managed security and M365/Entra identity assessments for teams.
 
 [![CI](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml/badge.svg)](https://github.com/earbona23/entra-tripwire/actions/workflows/ci.yml)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/EntraTripwire?label=PSGallery&color=5391FE)](https://www.powershellgallery.com/packages/EntraTripwire)
+[![Downloads](https://img.shields.io/powershellgallery/dt/EntraTripwire?label=installs&color=2f855a)](https://www.powershellgallery.com/packages/EntraTripwire)
 [![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-blue.svg)](LICENSE)
 [![Mutation tested](https://img.shields.io/badge/mutation-17%2F17%20killed-2f855a)](docs/scoring.md#mutation-testing)
@@ -25,6 +27,7 @@ hypothetical:
 > **Is someone in here right now?**
 
 ```powershell
+Install-Module EntraTripwire -Scope CurrentUser
 Watch-TripwireActivity -Demo | Format-Table Confidence, Band, DecoyName, ActorLabel
 ```
 
