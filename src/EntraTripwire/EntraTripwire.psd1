@@ -4,7 +4,7 @@
     GUID              = 'b6f0d3a1-5c72-4e19-9a84-3d1e7c0b25af'
 
     Author            = 'Eduard Arbona'
-    CompanyName       = 'Unknown'
+    CompanyName       = 'ArrankaGo LLC'
     Copyright         = '(c) 2026 Eduard Arbona. Released under the MIT licence.'
 
     Description       = 'Deception-based intrusion detection for Microsoft Entra ID. Plants decoy identities, application registrations and credentials that no legitimate process should ever touch, watches Microsoft Graph sign-in and directory audit logs for contact with them, and scores every touch through a calibrated false-positive suppression engine before it reaches a human. Optional containment is dry-run by default and never acts on a degraded or low-confidence signal.'

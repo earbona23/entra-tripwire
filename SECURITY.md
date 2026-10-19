@@ -6,6 +6,8 @@ Open a [private security advisory](https://github.com/earbona23/entra-tripwire/s
 on this repository. Please do not open a public issue for anything that would let someone
 misuse the write path or defeat detection.
 
+If you cannot use the advisory form, email **earbona@arrankago.com** instead.
+
 ## What counts as a vulnerability here
 
 This module is defensive tooling with a small but real write surface, so the interesting
