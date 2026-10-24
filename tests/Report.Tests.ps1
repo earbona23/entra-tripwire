@@ -130,3 +130,67 @@ Describe 'A trip the scoring engine could place no clock on' {
         Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
     }
 }
+
+Describe 'The report is a deliverable, not a dump' {
+
+    It 'forbids every external fetch from inside the document itself' {
+        # default-src 'none' costs nothing here -- the report has no scripts and nothing to
+        # load -- and it means a browser refuses to fetch anything even if a future change,
+        # or a smuggled string, tried to make it.
+        $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip @($t) } $trip
+        $html | Should -Match "Content-Security-Policy"
+        $html | Should -Match "default-src 'none'"
+        $html | Should -Not -Match '<script'
+    }
+
+    It 'leads with a verdict and the commands to run next, above the findings' {
+        # Somebody who has never used this tool gets the report forwarded to them. What it
+        # means, and what to do, has to be IN the document: the README does not travel with it.
+        $trips = @(Watch-TripwireActivity -Demo)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip $t -Demo } $trips
+        $html | Should -Match 'class="vlabel">Verdict<'
+        $html | Should -Match 'Invoke-TripwireContainment'
+        $html.IndexOf('vlabel') | Should -BeLessThan $html.IndexOf('<table>')
+    }
+
+    It 'explains what each band means without sending the reader anywhere' {
+        $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip @($t) } $trip
+        $html | Should -Match 'What the bands mean'
+        $html | Should -Match 'The only band containment is eligible in'
+        $html | Should -Match 'How to read this'
+    }
+
+    It 'prints the confidence the engine computed rather than an integer cast of it' {
+        # [int]99.6 is 100. A report that prints 100 for a score of 99.6 overstates the
+        # evidence in a document somebody may act on.
+        $trips = @(Watch-TripwireActivity -Demo)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip $t -Demo } $trips
+        $html | Should -Match '"pill">99\.6<'
+        $html | Should -Not -Match '"pill">100<'
+    }
+
+    It 'carries print rules, because an incident report gets printed' {
+        $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip @($t) } $trip
+        $html | Should -Match '@media print'
+        $html | Should -Match 'page-break-inside:avoid'
+    }
+
+    It 'leaves out the fields a log source did not carry instead of printing empty gaps' {
+        # A directory audit record has no address and no country. Joining the metadata
+        # unconditionally printed two separators with nothing between them, which reads as
+        # data this tool lost rather than data the log never had.
+        $touch = New-TestTouch -Ip '' -Country '' -Source 'DirectoryAudit'
+        $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip @($t) } $trip
+        $html | Should -Not -Match '&middot;\s*&middot;'
+    }
+
+    It 'states the window it actually observed, taken from the touches themselves' {
+        $trips = @(Watch-TripwireActivity -Demo)
+        $html = & $script:Module { param($t) ConvertTo-TripwireHtmlReport -Trip $t -Demo } $trips
+        $html | Should -Match 'touches from 2026-06-01 09:02:00Z to 2026-06-15 03:20:00Z'
+    }
+}
