@@ -1,0 +1,65 @@
+name: Proposal
+description: A new signal, a new suppression rule, a calibration change, or anything that changes behaviour.
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open this before writing the code. Some things are permanently out of scope and
+        are listed in [GOVERNANCE.md](../../GOVERNANCE.md): anything offensive, telemetry
+        or phone-home, new dependencies, and anything that makes an unevaluated signal
+        look evaluated. An hour reading that page is cheaper than a declined weekend.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is defensive. It does not contact, probe, scan or respond to the source of an intrusion.
+          required: true
+        - label: This adds no network call home, no telemetry and no activation server.
+          required: true
+        - label: I have read what GOVERNANCE.md says is out of scope.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: The situation the module handles badly today. Concrete beats general.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+    validations:
+      required: true
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Effect on the two invariants
+      description: |
+        If this touches the scoring: no single signal can reach the High band alone, and a
+        contaminated decoy can never reach the High band. What happens to each?
+        Write "does not touch scoring" if that is the case.
+    validations:
+      required: true
+
+  - type: textarea
+    id: write
+    attributes:
+      label: Does this need a new entry in the write allowlist
+      description: If yes, name the exact Graph operation and body, and justify it. If no, write "no".
+    validations:
+      required: true
+
+  - type: textarea
+    id: mutant
+    attributes:
+      label: How a test would be killed by mutation
+      description: What defect would you introduce in `scripts/mutation-test.ps1` to prove the new test bites? A test that passes with and without the defect is documentation, not a test.
+    validations:
+      required: true

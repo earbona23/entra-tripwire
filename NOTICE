@@ -1,0 +1,51 @@
+entra-tripwire
+Copyright (c) 2026 Eduard Arbona. All rights reserved.
+
+This product includes software developed by Eduard Arbona
+(https://github.com/earbona23/entra-tripwire).
+
+Licence
+-------
+
+The contents of this repository are licensed under the MIT Licence. See LICENSE
+for the full text, and LICENSING.md for what that does and does not cover.
+
+Attribution
+-----------
+
+The MIT Licence requires that the copyright notice in LICENSE and the permission
+notice that follows it be included in all copies or substantial portions of the
+software. That requirement is not a formality here, and it is the one condition
+the licence actually imposes:
+
+- If you redistribute this module, in whole or in part, modified or unmodified,
+  the LICENSE file travels with it.
+- If you vendor, inline or re-publish individual functions, scoring weights,
+  fixtures or the HTML report template, the notice still applies. Copying a file
+  without its notice is a licence breach, not a style choice.
+- If you publish a fork, say that it is a fork and link back here. That is not a
+  licence condition, it is a request, and the difference is stated on purpose.
+
+Trademarks
+----------
+
+The MIT Licence grants rights in the copyrighted work. It grants no rights in
+names, logos or brands. See TRADEMARKS.md.
+
+Third-party names
+-----------------
+
+Microsoft, Microsoft Entra, Microsoft Entra ID, Microsoft Graph, Azure and
+PowerShell are trademarks of the Microsoft group of companies. MITRE ATT&CK is a
+registered trademark of The MITRE Corporation. Other product and company names
+mentioned in this repository may be the trademarks of their respective owners.
+They are used here only to describe what this software interoperates with and
+what it detects. No affiliation with, endorsement by, or sponsorship from any of
+them is claimed or implied.
+
+Contributions
+-------------
+
+Contributors retain the copyright in their own contributions and are credited in
+the commit history. The terms under which contributions are made are in CLA.md
+and DCO.

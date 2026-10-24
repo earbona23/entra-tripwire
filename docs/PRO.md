@@ -41,11 +41,14 @@ licence that expires mid-session stops working in that session.
 
 ## Getting a licence
 
-- **[GitHub Sponsors](https://github.com/sponsors/earbona23)** — sponsoring at the Pro tier
-  includes a key.
-- **[Patreon](https://www.patreon.com/EduardArbona)** — same.
-- Checkout through Polar / Lemon Squeezy is being set up; until it is live, sponsorship is
-  the route.
+Email **earbona@arrankago.com** with the name to put on the licence. You get the key by
+return email, usually the same day. That is the whole process: there is no account to
+create and nothing to install.
+
+Sponsoring at or above the monthly price on
+**[GitHub Sponsors](https://github.com/sponsors/earbona23)** also covers it — custom
+amounts are accepted there. Email after sponsoring so the key can be issued to the right
+organisation name.
 
 Keys are per-organisation and perpetual unless a term is stated on the key itself.
 

@@ -1,0 +1,77 @@
+name: Bug report
+description: Something behaves differently from what the documentation says it does.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not for vulnerabilities. If the bug is "the module reported clean about something it
+        never looked at", that is a security class in this project, not a bug: open a
+        [private advisory](https://github.com/earbona23/entra-tripwire/security/advisories/new).
+
+        Never paste real tenant identifiers, object IDs, sign-in records or captures.
+        Redact them, or reproduce the problem against `-Demo`.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before filing
+      options:
+        - label: I am not reporting a vulnerability, and this is not tenant data.
+          required: true
+        - label: I searched the existing issues.
+          required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and where it says so
+      description: Quote the README, the comment-based help or the docs page. If the documentation is what is wrong, say that instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Paste the actual output, redacted. "It failed" is not reproducible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Ideally a command against `-Demo` or the shipped fixtures. If it needs a tenant, describe the minimum shape of the data rather than pasting it.
+      render: powershell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Module version
+      description: "`(Get-Module EntraTripwire -ListAvailable).Version`"
+    validations:
+      required: true
+
+  - type: input
+    id: psversion
+    attributes:
+      label: PowerShell version and OS
+      description: "`$PSVersionTable.PSVersion` and the platform. 7.2+ is supported."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - DEMO (no tenant)
+        - Detection only (read scopes)
+        - Planting (write consent)
+        - Containment plan (no writes)
+        - Containment execute (Pro)
+    validations:
+      required: true

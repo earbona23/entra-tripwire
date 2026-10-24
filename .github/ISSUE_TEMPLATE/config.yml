@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/earbona23/entra-tripwire/security/advisories/new
+    about: Never in a public issue. Open a private advisory. See SECURITY.md for which classes count.
+  - name: Question, idea, or "is this the right tool for X"
+    url: https://github.com/earbona23/entra-tripwire/discussions
+    about: Ask here rather than opening an issue. No reproduction required.
+  - name: Licensing, purchasing or Pro keys
+    url: https://github.com/earbona23/entra-tripwire/blob/main/LICENSING.md
+    about: Read this first, then email earbona@arrankago.com. Not an issue.
+  - name: Before you file anything
+    url: https://github.com/earbona23/entra-tripwire/blob/main/GOVERNANCE.md
+    about: What gets merged, and what is permanently out of scope. Short on purpose.

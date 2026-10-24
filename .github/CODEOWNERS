@@ -1,0 +1,45 @@
+# Code owners for entra-tripwire.
+#
+# One maintainer owns everything. The per-path lines below are redundant today and are
+# written anyway: they record WHICH paths are the sensitive ones, they keep being correct
+# if a second maintainer is ever added to the catch-all rule, and the last matching
+# pattern wins, so the specific paths at the bottom cannot be loosened by accident.
+#
+# Review from a code owner is only actually required if branch protection on `main` has
+# "Require review from Code Owners" enabled. See GOVERNANCE.md.
+
+# Everything.
+*                                   @earbona23
+
+# The write surface. Nothing reaches a tenant except through these.
+/src/EntraTripwire/Private/Invoke-TripwireGraphWrite.ps1   @earbona23
+/src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1 @earbona23
+/src/EntraTripwire/Public/Invoke-TripwireContainment.ps1   @earbona23
+/src/EntraTripwire/Public/Remove-TripwireDecoy.ps1         @earbona23
+/tests/Safety.Tests.ps1                                     @earbona23
+
+# The commercial gate and the keys it verifies against.
+/src/EntraTripwire/Private/License.ps1              @earbona23
+/src/EntraTripwire/Public/Enable-TripwirePro.ps1    @earbona23
+/src/EntraTripwire/Public/Get-TripwireLicense.ps1   @earbona23
+
+# The calibration. Changing these numbers changes what the tool tells a human.
+/src/EntraTripwire/Public/Get-TripwirePolicy.ps1         @earbona23
+/src/EntraTripwire/Public/Measure-TripwireConfidence.ps1 @earbona23
+/src/EntraTripwire/Private/Measure-TripwireSignal.ps1    @earbona23
+
+# Build, release and the gates themselves.
+/.github/                           @earbona23
+/scripts/                           @earbona23
+/src/EntraTripwire/EntraTripwire.psd1 @earbona23
+
+# Licensing, ownership and governance.
+/LICENSE                            @earbona23
+/NOTICE                             @earbona23
+/LICENSING.md                       @earbona23
+/CLA.md                             @earbona23
+/DCO                                @earbona23
+/TRADEMARKS.md                      @earbona23
+/GOVERNANCE.md                      @earbona23
+/SECURITY.md                        @earbona23
+/CONTRIBUTING.md                    @earbona23

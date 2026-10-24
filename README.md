@@ -64,6 +64,8 @@ That output came from the fixtures inside the module. No tenant, no credentials,
 - [Development, tests and mutation testing](#development-tests-and-mutation-testing)
 - [Limitations](#limitations)
 - [Support the project](#support-the-project)
+- [Contributing](#contributing)
+- [Licence, attribution and the name](#licence-attribution-and-the-name)
 
 ---
 
@@ -413,8 +415,35 @@ offline, ships its own tests, and maps its detections to MITRE ATT&CK.
 - **[revtriage](https://github.com/earbona23/revtriage)** — offline malware triage: an explainable score and a STIX bundle from a suspicious file.
 - **[containment-cut](https://github.com/earbona23/containment-cut)** — the minimum-cost set of actions that provably severs a compromised identity, with a proof.
 
-## Licence
+## Contributing
 
-[MIT](LICENSE).
+Bug reports, false positives you can describe, and corrections to the calibration are the
+most useful things this project receives. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**;
+**[GOVERNANCE.md](GOVERNANCE.md)** says what gets merged readily and what is permanently
+out of scope, which is the cheaper page to read first if you are considering something
+large.
+
+Two one-time formalities, both explained where they are asked for: every commit is signed
+off under the **[DCO](DCO)**, and a first pull request accepts the
+**[Contributor Licence Agreement](CLA.md)**. You keep the copyright in your own work.
+
+Vulnerabilities do not go in an issue. See **[SECURITY.md](SECURITY.md)**, which also
+lists which classes of bug this project treats as security rather than usability.
+
+## Licence, attribution and the name
+
+**[MIT](LICENSE).** Use it commercially, modify it, embed it, redistribute it, keep your
+changes private. The one condition is that the copyright and permission notices travel
+with any copy or substantial portion -- see **[NOTICE](NOTICE)**.
+
+**[LICENSING.md](LICENSING.md)** is the longer answer, including what the licence means
+for the Pro entitlement, which is checked by code that ships in this repository and that
+you can read.
+
+The licence covers copyright, not names. **[TRADEMARKS.md](TRADEMARKS.md)** covers the
+rest: fork freely, give your fork its own name. Microsoft, Microsoft Entra ID and
+Microsoft Graph are trademarks of the Microsoft group of companies, used here only to
+describe what this module talks to. This project is not affiliated with, endorsed by or
+sponsored by Microsoft.
 
 Provided as-is. Plant decoys only in a tenant you are authorised to administer.

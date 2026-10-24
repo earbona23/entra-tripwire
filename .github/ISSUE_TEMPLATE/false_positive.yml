@@ -1,0 +1,48 @@
+name: False positive or missed detection
+description: A trip that should have been suppressed, or a touch that should have scored and did not.
+labels: ["calibration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful kind of report this project receives, and the hardest to
+        act on without data. Redact everything identifying: what matters is the shape of
+        the signals, not who they belong to.
+
+        The reasoning behind every weight is in [docs/scoring.md](../../docs/scoring.md),
+        so you can disagree with a specific number rather than with the result.
+
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Which way did it go wrong
+      options:
+        - False positive -- scored high, was legitimate
+        - False negative -- should have scored, did not
+        - Wrong band -- scored, but in the wrong one
+        - Suppressed when it should not have been
+    validations:
+      required: true
+
+  - type: textarea
+    id: scored
+    attributes:
+      label: What the module produced
+      description: The scored object, redacted. `Confidence`, `Band`, the per-signal breakdown, and the degraded flag.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: truth
+    attributes:
+      label: What it should have produced, and how you know
+      description: What the activity actually was. "It was our vulnerability scanner" is a complete answer and leads to a suppression rule.
+    validations:
+      required: true
+
+  - type: textarea
+    id: signals
+    attributes:
+      label: Any signal that was unavailable
+      description: A withheld signal contributes zero by design. If the run was degraded, say so here -- it often explains the whole report.
