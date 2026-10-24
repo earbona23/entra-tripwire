@@ -9,7 +9,7 @@ What sponsorship pays for is the part with an ongoing cost: keeping the rule cat
 current, tracking the Microsoft Graph and platform changes that quietly break a check,
 answering issues, and cutting the releases that follow. Tiers, one-time amounts, custom
 amounts and what each one includes are listed at https://github.com/sponsors/earbona23.
-Sponsoring at or above the Pro monthly price covers a licence key; email after sponsoring so
+Sponsoring at or above the Pro monthly price (**$49** for Solo) covers a licence key; email after sponsoring so
 it can be issued to the right organisation name — see [docs/PRO.md](docs/PRO.md).
 
 Anyone credited here can ask to be removed, or to have their entry changed, at any time:

@@ -64,9 +64,8 @@ and a lapsed licence that keeps working is the failure direction that costs some
 
 ## Getting Pro
 
-**[consulting.arrankago.com](https://consulting.arrankago.com)** — pricing, tiers and purchase.
-That site is the single source of truth for what Pro costs, which is why no price is published
-here: two price lists are one too many, and the one that goes stale is always the one in a README.
+**[consulting.arrankago.com](https://consulting.arrankago.com)** — tiers and purchase. From
+**$49 per organisation per month** for Solo, with the full matrix under [Pricing](#pricing) below.
 
 Or email **earbona@arrankago.com** with the organisation name to put on the licence. You get the
 module and, where the licence is time-limited, its key, usually the same day.
@@ -87,8 +86,20 @@ and writes an incident capture to disk. It never contacts, probes or responds to
 of the intrusion — the write allowlist has no entry that could.
 ## Pricing
 
-Per organisation, unlimited seats, with annual billing at two months free. The current figures
-live at **[consulting.arrankago.com](https://consulting.arrankago.com)**, which is the one place
-they are maintained.
+Per organisation, per month, in USD. Annual billing is two months free, so the yearly figure is
+ten times the monthly one. Unlimited users within the seat band.
 
-The licence itself is a signed file verified offline: no account, no phone-home.
+| | Solo (1) | Team (≤10) | Business (≤50) | Enterprise |
+|---|:--:|:--:|:--:|:--:|
+| **Monthly** | **$49** | **$149** | **$449** | contact |
+| **Annual** | $490 | $1,490 | $4,490 | contact |
+
+All four tools together, as the suite, is **$99** Solo, **$349** Team and **$999** Business per
+month, which is the better deal if you already use more than one of them.
+
+**[Buy at consulting.arrankago.com](https://consulting.arrankago.com)**, or email
+**earbona@arrankago.com** with the organisation name to put on the licence. Those figures are the
+ones on that site; if you ever see the two disagree, the site is right and this page is stale.
+
+The licence itself is a signed file verified offline: no account, no activation server, no
+phone-home.
