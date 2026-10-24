@@ -21,8 +21,10 @@
 
     Two guarantees worth stating plainly:
 
-      * Nothing is written to a tenant without an interactive confirmation. -NonInteractive
-        cannot plant, cannot contain and cannot write: the offer is never made.
+      * Nothing is written to a tenant without an interactive confirmation. The guided run
+        has exactly one write -- planting a decoy user -- and -NonInteractive never reaches
+        it, because the offer is only made to a session that can be asked. Containment is
+        not part of this command at all: it prints the command and stops.
       * Nothing here decides a verdict. Every number comes from Watch-TripwireActivity and
         the scoring policy; this command arranges them and says what to do next.
 
