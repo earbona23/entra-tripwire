@@ -36,8 +36,16 @@ function Connect-EntraTripwire {
         [string] $ProfileName = 'default'
     )
 
-    if ($ProfileName -ne 'default' -and -not (Test-TripwireFeature -Feature 'multitenant')) {
-        throw "Named profiles are an EntraTripwire Pro feature (multitenant). The free module manages one tenant at a time under the 'default' profile. See docs/PRO.md."
+    # Named profiles keep each tenant's decoy inventory and baseline apart, which is what
+    # managing more than one tenant requires: a decoy planted in one tenant must not be
+    # looked for in another's sign-in log, and one tenant's baseline must not suppress a
+    # touch in another. The isolation is provided by EntraTripwirePro.
+    $script:TripwireStateRootOverride = $null
+    if ($ProfileName -ne 'default') {
+        if (-not (Test-TripwireProFeature -Feature 'multitenant')) {
+            throw "Named profiles need EntraTripwirePro (multitenant), which is not installed. $((Get-TripwireProvider).Reason) The free module manages one tenant at a time under the 'default' profile."
+        }
+        $script:TripwireStateRootOverride = Invoke-TripwireProCapability -Capability 'Profile' -Arguments @{ ProfileName = $ProfileName }
     }
 
     if (-not (Get-Module -ListAvailable -Name 'Microsoft.Graph.Authentication')) {

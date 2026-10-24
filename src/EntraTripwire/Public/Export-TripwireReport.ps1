@@ -44,8 +44,8 @@ function Export-TripwireReport {
     process { $collected.Add($Trip) }
 
     end {
-        if (($Format -eq 'Jsonl' -or $WebhookUri) -and -not (Test-TripwireFeature -Feature 'soar')) {
-            throw "JSONL and webhook delivery are an EntraTripwire Pro feature (soar). Html and Json exports are free and contain the same data. See docs/PRO.md."
+        if (($Format -eq 'Jsonl' -or $WebhookUri) -and -not (Test-TripwireProFeature -Feature 'soar')) {
+            throw "JSONL and webhook delivery need EntraTripwirePro (soar), which is not installed. $((Get-TripwireProvider).Reason) Html and Json exports are free and contain the same data."
         }
 
         if (-not $Path) {
@@ -70,7 +70,17 @@ function Export-TripwireReport {
         if ($WebhookUri) {
             foreach ($t in $trips) {
                 if (-not $PSCmdlet.ShouldProcess($WebhookUri, "POST trip $($t.TouchId)")) { continue }
-                Send-TripwireWebhook -Uri $WebhookUri -Trip $t
+                # Delivery is the paid capability; the outcome is logged here, on the side
+                # that owns the audit trail. A failure is reported as a failure: a pipeline
+                # that silently drops the one event that mattered is worse than none.
+                try {
+                    Invoke-TripwireProCapability -Capability 'Webhook' -Arguments @{ Uri = $WebhookUri; Trip = $t }
+                    Write-TripwireLog -Message "Delivered trip $($t.TouchId) to the webhook."
+                }
+                catch {
+                    Write-TripwireLog -Level 'Warn' -Message "Webhook delivery FAILED for trip $($t.TouchId): $($_.Exception.Message). This trip was NOT delivered."
+                    throw
+                }
             }
         }
 

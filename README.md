@@ -304,8 +304,9 @@ These are structural, and each has a test that fails the build if it stops being
 - **`Remove-TripwireDecoy` will only delete objects it recorded as decoys.** A typo or a
   copied GUID cannot become a deleted employee.
 - **No network probe aimed at an observed address.** No `Test-NetConnection`, no `TcpClient`,
-  no `Start-Process`. The only non-Graph outbound call in the module is the operator-supplied
-  SOAR webhook.
+  no `Start-Process`. **There is no non-Graph outbound call in this module at all** — webhook
+  delivery lives in the paid module, so an operator auditing what leaves the machine reads two
+  Graph gateways and nothing else.
 - **The decoy password is never returned or stored.** Asserted against both the returned
   object and the inventory file.
 - **Blind runs announce themselves.** An empty inventory warns *"this is a blind run, not a
@@ -325,12 +326,30 @@ These are structural, and each has a test that fails the build if it stops being
 | Multiple tenant profiles | — | yes |
 
 Nothing the module *detects* is behind the licence: a free installation sees exactly what a
-Pro one sees and scores it identically. The licence is an ECDSA P-256 token verified
-**entirely offline** — no account, no activation server, no telemetry.
+Pro one sees and scores it identically, and the containment **plan** is complete and free, with
+every Graph call spelled out so it can be run by hand.
+
+**The three paid capabilities are not in this repository.** They are a separate module,
+`EntraTripwirePro`, and holding it is the entitlement. That is deliberate, and worth being
+explicit about: a licence check inside an MIT module is a line of code anyone may delete, and
+deleting it would uncover working capability underneath. There is nothing here to uncover. What
+stays on this side, and what a customer can therefore read for themselves:
+
+- **every verdict** — detection, scoring, suppression and the plan are computed here, so no paid
+  code can change what your tenant is told about itself;
+- **the Graph write allowlist** — the paid module issues its writes through the gateway in this
+  repository, so it cannot make a call this module does not permit;
+- **the confirmation prompt and the audit log.**
+
+A licence key is only needed for a time-limited or feature-scoped licence, and it is verified
+offline by that module: no account, no activation server, no telemetry.
 
 ```powershell
-Enable-TripwirePro -LicenseKey 'TRIPWIRE-xxxxx.yyyyy'   # verified locally, nothing phones home
-Get-TripwireLicense
+# Install EntraTripwirePro and Pro is on. There is nothing to activate.
+Get-TripwireLicense       # reports whether it is installed, and which capabilities it provides
+
+# Only for a time-limited or feature-scoped licence; verified offline by the paid module.
+Enable-TripwirePro -LicenseKey 'TRIPWIRE-xxxxx.yyyyy'
 ```
 
 Details: **[docs/PRO.md](docs/PRO.md)**.
@@ -345,7 +364,7 @@ Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.
 pwsh ./scripts/mutation-test.ps1
 ```
 
-**119 tests across seven files.** The Graph gateways are stubbed, so every code path runs for
+**152 tests across eight files.** The Graph gateways are stubbed, so every code path runs for
 real against simulated responses — including the paths where the engine must refuse to draw a
 conclusion.
 
@@ -353,7 +372,7 @@ A green suite proves the tests ran. It does not prove they would notice if the e
 wrong, so `scripts/mutation-test.ps1` introduces one real defect at a time and requires the
 suite to go red.
 
-**17 mutants, 17 killed, 0 survived, 0 not applied.**
+**31 mutants, 31 killed, 0 survived, 0 not applied.**
 
 It reports three outcomes, not two: `Killed`, `SURVIVED`, and `NOT APPLIED`. The third exists
 because a mutation that silently fails to apply produces a green run that is identical to a
@@ -403,7 +422,9 @@ watching, the whole confidence engine, the report, and the full containment plan
 
 - **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** — any amount.
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
-  multi-tenant, under an offline ECDSA licence. Built for teams who live in this module. From US$29/mo per org — [pricing](docs/PRO.md#pricing).
+  multi-tenant, as a separate module. Built for teams who live in this module.
+  **[Pricing and purchase](https://consulting.arrankago.com)** — one price list, kept in one
+  place, so this repository and the site can never disagree. See [docs/PRO.md](docs/PRO.md).
 
 ## More tools like this
 
@@ -436,9 +457,9 @@ lists which classes of bug this project treats as security rather than usability
 changes private. The one condition is that the copyright and permission notices travel
 with any copy or substantial portion -- see **[NOTICE](NOTICE)**.
 
-**[LICENSING.md](LICENSING.md)** is the longer answer, including what the licence means
-for the Pro entitlement, which is checked by code that ships in this repository and that
-you can read.
+**[LICENSING.md](LICENSING.md)** is the longer answer, including what the licence means for
+the Pro capabilities, which are a separate module rather than code in this repository, and
+what that change did and did not take away from what you can audit.
 
 The licence covers copyright, not names. **[TRADEMARKS.md](TRADEMARKS.md)** covers the
 rest: fork freely, give your fork its own name. Microsoft, Microsoft Entra ID and

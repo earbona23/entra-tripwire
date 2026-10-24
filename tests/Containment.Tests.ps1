@@ -14,19 +14,6 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
     Install-GraphStub -Module $script:Module
 
-    $script:Ecdsa = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
-    $script:PubSpki = [Convert]::ToBase64String($script:Ecdsa.ExportSubjectPublicKeyInfo())
-    $script:RealPub = & $script:Module { $script:LicensePublicKeySpki }
-    . $script:Module { param($p) $script:LicensePublicKeySpki = $p } $script:PubSpki
-
-    function script:MintPro {
-        $json = (@{ sub = 'Test'; plan = 'pro'; iat = 1 } | ConvertTo-Json -Compress)
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-        $sig = $script:Ecdsa.SignData($bytes, [System.Security.Cryptography.HashAlgorithmName]::SHA256,
-            [System.Security.Cryptography.DSASignatureFormat]::Rfc3279DerSequence)
-        function b64u([byte[]] $b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
-        return "TRIPWIRE-$(b64u $bytes).$(b64u $sig)"
-    }
 
     # A trip that clears every content gate: pristine decoy, unseen origin, four-decoy
     # sweep, dead hour. Every test below starts from this and closes exactly one gate.
@@ -43,8 +30,7 @@ BeforeAll {
 }
 
 AfterAll {
-    . $script:Module { param($p) $script:LicensePublicKeySpki = $p } $script:RealPub
-    Remove-Item Env:\ENTRATRIPWIRE_LICENSE_KEY -ErrorAction SilentlyContinue
+    Remove-ProStub -Module $script:Module
 }
 
 # Pester does not allow a setup block directly in the container, so every Describe lives
@@ -53,13 +39,15 @@ Describe 'Containment' {
 
 BeforeEach {
     Clear-GraphStubCall -Module $script:Module
-    Remove-Item Env:\ENTRATRIPWIRE_LICENSE_KEY -ErrorAction SilentlyContinue
+    # Default to the paid module being absent, so the gate tests below are testing the
+    # gate and not the machine they happen to run on.
+    Remove-ProStub -Module $script:Module
 }
 
 Describe 'The plan is free, complete, and changes nothing' {
 
     It 'defaults to a dry run even with a Pro licence and no other blocker' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $result = script:NewHighTrip | Invoke-TripwireContainment
         $result.Mode | Should -Be 'DryRun'
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
@@ -86,7 +74,7 @@ Describe 'The plan is free, complete, and changes nothing' {
 Describe 'GATE 1 -- band' {
 
     It 'refuses a Medium trip and says which band is required' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         # Pristine decoy + unseen country, no fan-out, peak hour: 65, Medium.
         $touch = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
@@ -99,7 +87,7 @@ Describe 'GATE 1 -- band' {
     }
 
     It 'refuses a Suppressed trip' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $b = New-TestBaseline -SuppressedActors @('actor-1')
         $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline $b -DistinctDecoyCount 6
         $result = $trip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
@@ -111,7 +99,7 @@ Describe 'GATE 1 -- band' {
 Describe 'GATE 2 -- degraded scoring' {
 
     It 'refuses a High trip that was scored with a signal withheld' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         # No baseline: purity 40 + fan-out 25 = 65 with two signals withheld. Even raising
         # fan-out cannot reach High, so build the degraded case explicitly.
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512'
@@ -129,7 +117,7 @@ Describe 'GATE 2 -- degraded scoring' {
     }
 
     It 'proceeds when the operator explicitly accepts a degraded score' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -ActorId 'u-decoy-1'
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline) -DistinctDecoyCount 4
         $trip.Degraded = $true
@@ -145,7 +133,7 @@ Describe 'GATE 2 -- degraded scoring' {
 Describe 'GATE 3 -- explicit -Execute' {
 
     It 'is the only thing standing between a plan and an action' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $trip = script:NewHighTrip
 
         ($trip | Invoke-TripwireContainment).Mode | Should -Be 'DryRun'
@@ -161,21 +149,32 @@ Describe 'GATE 3 -- explicit -Execute' {
 Describe 'GATE 4 -- ShouldProcess' {
 
     It 'performs nothing under -WhatIf' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -WhatIf
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
         @($result.Performed | Where-Object Status -eq 'Done').Count | Should -Be 0
     }
 }
 
-Describe 'GATE 5 -- Pro licence' {
+Describe 'GATE 5 -- the paid module' {
 
-    It 'refuses to execute without the containment feature but hands over the whole plan' {
+    It 'refuses to execute without it, names it, and hands over the whole plan' {
         $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
         $result.Mode | Should -Be 'DryRun'
         $result.Licensed | Should -BeFalse
-        ($result.Blockers -join ' ') | Should -Match 'Pro feature'
+        ($result.Blockers -join ' ') | Should -Match 'EntraTripwirePro'
+        # The refusal has to say what the operator still has, not only what they lack:
+        # the plan is complete and every action carries the Graph call it would issue.
+        ($result.Blockers -join ' ') | Should -Match 'run by hand'
         @($result.Plan | Where-Object Eligible).Count | Should -BeGreaterThan 0
+        @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
+    }
+
+    It 'refuses when the module is installed but entitles nothing, which is a lapsed licence' {
+        Install-ProStub -Module $script:Module -Capabilities @()
+        $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath (Join-Path ([System.IO.Path]::GetTempPath()) "inc-$([Guid]::NewGuid())") -Confirm:$false
+        $result.Mode | Should -Be 'DryRun'
+        $result.Licensed | Should -BeFalse
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
     }
 }
@@ -183,7 +182,7 @@ Describe 'GATE 5 -- Pro licence' {
 Describe 'What containment actually does when every gate is open' {
 
     It 'revokes the actor sessions, disables the used decoy, and captures the context' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $capture = Join-Path ([System.IO.Path]::GetTempPath()) ("inc-{0}" -f [Guid]::NewGuid())
         $result = script:NewHighTrip | Invoke-TripwireContainment -Execute -CapturePath $capture -Confirm:$false
 
@@ -198,7 +197,7 @@ Describe 'What containment actually does when every gate is open' {
     }
 
     It 'does not disable a decoy that was merely READ: that would tell the intruder they were seen' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -Source 'DirectoryAudit'
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline) -DistinctDecoyCount 4
         $result = $trip | Invoke-TripwireContainment
@@ -208,7 +207,7 @@ Describe 'What containment actually does when every gate is open' {
     }
 
     It 'honours -Action, so an operator can capture without touching the tenant' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $capture = Join-Path ([System.IO.Path]::GetTempPath()) ("inc-{0}" -f [Guid]::NewGuid())
         script:NewHighTrip | Invoke-TripwireContainment -Execute -Action CaptureContext -CapturePath $capture -Confirm:$false | Out-Null
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
@@ -223,7 +222,7 @@ Describe 'What containment actually does when every gate is open' {
     # decoy while naming a different principal, and the module would then have disabled
     # that principal under the label 'DisableDecoy'.
     It 'refuses to disable anything when the log and the inventory name different objects' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' `
             -ActorId 'someone-else' -ActorUpn 'svc-bait@contoso.com'
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy -ObjectId 'u-decoy-1') `
@@ -240,7 +239,7 @@ Describe 'What containment actually does when every gate is open' {
     }
 
     It 'refuses to disable a decoy the inventory has no object id for' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -ActorId 'u-decoy-1'
         $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy -ObjectId '') `
             -Baseline (New-TestBaseline) -DistinctDecoyCount 4
@@ -253,7 +252,7 @@ Describe 'What containment actually does when every gate is open' {
     # the application object id the inventory holds. PATCHing /v1.0/users/<application id>
     # addresses the wrong object entirely.
     It 'refuses to disable a decoy that is not a user' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -ActorId 'a-decoy-1'
         $trip = Measure-TripwireConfidence -Touch $touch `
             -Decoy (New-TestDecoy -Type 'Application' -ObjectId 'a-decoy-1') `
@@ -264,7 +263,7 @@ Describe 'What containment actually does when every gate is open' {
     }
 
     It 'reports a failed action as Failed rather than folding it into a success' {
-        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        Install-ProStub -Module $script:Module
         # Make the Graph write throw for this test only.
         . $script:Module { function Invoke-MgGraphRequest { param($Method, $Uri, $Body, $OutputType, $ErrorAction) throw 'Graph said no' } }
         try {

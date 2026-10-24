@@ -1,9 +1,9 @@
 # Licensing
 
-Short version: everything in this repository is MIT. The paid edition is not a different
-codebase, it is an entitlement checked by code that is in this repository and that you can
-read. This page says exactly what that means, including the parts that are uncomfortable,
-because a licence page that only states the convenient half is not worth reading.
+Short version: everything in this repository is MIT, and the paid capabilities are not in
+this repository. They are a separate module. This page says exactly what that means,
+including the parts that are uncomfortable, because a licence page that only states the
+convenient half is not worth reading.
 
 ## What the MIT Licence gives you
 
@@ -26,15 +26,33 @@ notice must be included in all copies or substantial portions of the software. S
 
 ## The Pro edition
 
-Pro is an entitlement, not a separate download. `Enable-TripwirePro` verifies an ECDSA
-P-256 token offline against a public key embedded in the module, and three features read
-that entitlement: containment **execution**, SOAR/SIEM delivery, and multiple tenant
-profiles. Everything that detects and scores is free and is identical in both.
+Pro is a separate module, `EntraTripwirePro`, published privately rather than here, and
+holding it is the entitlement. Three capabilities live in it: containment **execution**,
+SOAR/SIEM delivery, and multiple tenant profiles. Everything that detects and scores is
+free, is in this repository, and is identical in both.
 
-The verification code is in `src/EntraTripwire/Private/License.ps1` and it is MIT, like the
-rest of the repository. So let us be direct about the consequence: **the MIT Licence
-permits you to fork this module and delete the entitlement check.** Nothing in `LICENSE`
-forbids it, and this page is not going to pretend otherwise.
+**This used to work the other way round, and the change is the honest part.** Until
+October 2026 the paid capabilities were in this repository behind a licence check written
+in MIT-licensed code. Let us be direct about what that meant: the MIT Licence permits you
+to fork this module and delete a check, and deleting that one would have uncovered working
+capability underneath. Nothing in `LICENSE` forbade it and this page did not pretend
+otherwise.
+
+Now there is nothing to uncover. The question this module asks is "is the paid module
+installed?", and removing the question does not install it. A fork has to **write** those
+three capabilities, which is a different thing from deleting a line.
+
+Two consequences worth stating, because they cut both ways:
+
+- **What is already published stays MIT, per version, for ever.** Every commit made before
+  the split is on GitHub under MIT, with the old gate in it. A licence change or a code
+  move only ever applies going forward. If you want that old version, the licence lets you
+  have it.
+- **What you can audit shrank, and deliberately not in the part that matters.** You can no
+  longer read the code that performs a containment write. You can still read every verdict,
+  the whole scoring engine, the containment plan, and the Graph write allowlist that the
+  paid module is made to issue its writes through. That last one is the point: the paid
+  module cannot make a call this repository does not permit.
 
 What that fork does not come with is a licence key, the private signing key, updates, the
 test suite being run against your changes by anyone but you, or any answer when the write

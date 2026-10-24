@@ -140,8 +140,11 @@ can see. Instead:
 
 Signals are withheld when: there is no baseline (origin, off hours), the baseline histogram
 is missing or malformed (off hours), the log source carries no geographic enrichment at all —
-directory audit records do not (origin), or the touched object is not in the decoy inventory
-(purity).
+directory audit records do not (origin), the touched object is not in the decoy inventory
+(purity), **the record carries no usable timestamp** (off hours, and impossible travel), or
+**`legitimateUseCount` is not a whole number** (purity). The last two are hand-maintained or
+source-supplied values, so they are the two that can arrive unusable, and asserting a purity
+that cannot be established is the direction that pushes a trip towards the containment band.
 
 ## The two structural invariants
 
@@ -183,7 +186,7 @@ surviving mutant — and identical in the flattering direction, since the harnes
 otherwise report "killed" for a defect it never introduced. Every edit is verified against
 the file contents before and after, and a mutation that does not apply fails the run.
 
-Current result — 17 mutants, 17 killed, 0 survived, 0 not applied. Two of them survived the
+Current result — 31 mutants, 31 killed, 0 survived, 0 not applied. Two of them survived the
 first run and are the reason two tests exist that otherwise would not:
 
 | Mutant that survived | The hole it exposed |

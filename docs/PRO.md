@@ -22,35 +22,57 @@ Nothing the module *detects* is behind the licence. A free installation sees exa
 Pro installation sees, scores it identically, and is handed the complete remediation plan —
 it just does not press the button for you.
 
-## How the licence works
+## How the entitlement works
 
-An ECDSA P-256 token, verified **entirely offline** against a public key embedded in the
-module. No account, no activation server, no telemetry, no callback. A detection tool that
-phones home during an incident is a detection tool that leaks the incident.
+Pro is a separate module, `EntraTripwirePro`, and **holding it is the entitlement**. Install it
+and Pro is on; there is nothing to activate, no account, no activation server, no telemetry and
+no callback. A detection tool that phones home during an incident is a detection tool that leaks
+the incident.
+
+```powershell
+Get-TripwireLicense       # installed? which capabilities? and if not, why not
+```
+
+That design is the honest version of a paid feature in an MIT project. A licence check inside
+MIT-licensed code is a line anyone may delete, and deleting it would uncover working capability
+underneath. The three paid capabilities are not in the free repository at all, so there is nothing
+to uncover: a fork has to write them, not remove a check.
+
+What stays in the free module on purpose, and what you can therefore audit yourself:
+
+| Stays free and readable | Why it matters to you |
+|---|---|
+| Every verdict: detection, scoring, suppression, the plan | No paid code can change what your tenant is told about itself |
+| The Graph write allowlist | The paid module writes **through** it, so it cannot issue a call the free module forbids |
+| `ShouldProcess` and the audit log | The confirmation you answer, and the record of what happened, are in the module you can read |
+
+### A licence key, when there is one
+
+A key is only needed for a **time-limited or feature-scoped** licence, such as an evaluation. It
+is an ECDSA P-256 token verified entirely offline against a public key embedded in the paid
+module:
 
 ```powershell
 Enable-TripwirePro -LicenseKey 'TRIPWIRE-xxxxx.yyyyy'
-Get-TripwireLicense
 ```
 
-The key can also be supplied as `$env:ENTRATRIPWIRE_LICENSE_KEY`, which is usually what you
-want in a scheduled task or a container.
+It can also be supplied as `$env:ENTRATRIPWIRE_LICENSE_KEY`, which is usually what you want in a
+scheduled task or a container. The entitlement is re-verified on every call rather than cached at
+import, so a licence that expires mid-session stops working in that session. And a licence that is
+present but does not verify entitles **nothing** — present-and-broken is not the same as absent,
+and a lapsed licence that keeps working is the failure direction that costs somebody money.
 
-The entitlement is re-verified from the key on every call rather than cached at import, so a
-licence that expires mid-session stops working in that session.
+## Getting Pro
 
-## Getting a licence
+**[consulting.arrankago.com](https://consulting.arrankago.com)** — pricing, tiers and purchase.
+That site is the single source of truth for what Pro costs, which is why no price is published
+here: two price lists are one too many, and the one that goes stale is always the one in a README.
 
-Email **earbona@arrankago.com** with the name to put on the licence. You get the key by
-return email, usually the same day. That is the whole process: there is no account to
-create and nothing to install.
+Or email **earbona@arrankago.com** with the organisation name to put on the licence. You get the
+module and, where the licence is time-limited, its key, usually the same day.
 
-Sponsoring at or above the monthly price on
-**[GitHub Sponsors](https://github.com/sponsors/earbona23)** also covers it — custom
-amounts are accepted there. Email after sponsoring so the key can be issued to the right
-organisation name.
-
-Keys are per-organisation and perpetual unless a term is stated on the key itself.
+Managed security and M365/Entra identity assessments are on the same site if you would rather have
+the work done than run the module yourself.
 
 ## What Pro containment actually does
 
@@ -65,17 +87,8 @@ and writes an incident capture to disk. It never contacts, probes or responds to
 of the intrusion — the write allowlist has no entry that could.
 ## Pricing
 
-Per organisation, unlimited seats. The licence is a signed file, verified offline — no
-account, no phone-home.
+Per organisation, unlimited seats, with annual billing at two months free. The current figures
+live at **[consulting.arrankago.com](https://consulting.arrankago.com)**, which is the one place
+they are maintained.
 
-| | Monthly | Annual (two months free) |
-|---|:--:|:--:|
-| This tool, Pro | US$29 | US$290 |
-| Both tools (revtriage · EntraTripwire) | US$69 | US$690 |
-
-containment-cut is listed as a third tool elsewhere, but its Pro features are not
-implemented yet, so it is **not part of this bundle and not on sale** — see
-[its Pro page](https://github.com/earbona23/containment-cut/blob/main/docs/pro.md).
-
-To buy, email **earbona@arrankago.com** with the name to put on the licence. You get the
-key by return email, usually the same day.
+The licence itself is a signed file verified offline: no account, no phone-home.

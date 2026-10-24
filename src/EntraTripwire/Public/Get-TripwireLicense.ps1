@@ -1,11 +1,16 @@
 <#
 .SYNOPSIS
-    Show the current licence entitlement.
+    Show what the paid capabilities of this installation are, and why.
 
 .DESCRIPTION
-    Reports the plan, the unlocked features, and -- when there is no entitlement -- the
-    reason, so "Pro is not working" is answerable without support: no licence activated,
-    a licence that expired, or a key that does not verify.
+    Answers "Pro is not working" without support. The paid capabilities live in a separate
+    module, EntraTripwirePro, so there are exactly three answers and this command names
+    which one applies: the module is not installed, it is installed and provides its
+    capabilities, or it is installed and provides none because the licence it holds has
+    lapsed or does not verify.
+
+    Every property the previous licence-based version returned is still here, so a script
+    that read Pro, Plan, LicensedTo, Features or Reason keeps working.
 
 .EXAMPLE
     Get-TripwireLicense
@@ -15,14 +20,15 @@ function Get-TripwireLicense {
     [OutputType([pscustomobject])]
     param()
 
-    $ent = Get-TripwireEntitlement
+    $provider = Get-TripwireProvider
     [pscustomobject]@{
-        Pro          = $ent.Pro
-        Plan         = $ent.Plan
-        LicensedTo   = $ent.Sub
-        Features     = @($ent.Features)
-        Reason       = $ent.Reason
-        LicenceFile  = Get-TripwireStatePath -Name 'license.json'
-        VerifiedHow  = 'ECDSA P-256, offline. Nothing is sent anywhere.'
+        Pro             = $provider.Available
+        Plan            = if ($provider.Available) { 'Pro' } else { 'Free' }
+        LicensedTo      = $null
+        Features        = @($provider.Capabilities)
+        Reason          = $provider.Reason
+        Provider        = $provider.Name
+        ProviderVersion = $provider.Version
+        VerifiedHow     = 'The paid capabilities are provided by the EntraTripwirePro module. Holding it is the entitlement; a licence key is only needed for a time-limited or feature-scoped licence, and is verified offline by that module.'
     }
 }

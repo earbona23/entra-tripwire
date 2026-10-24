@@ -124,15 +124,23 @@ function Invoke-TripwireContainment {
             $plan.Add([pscustomobject]@{ Name = 'CaptureContext'; Method = $null; Path = (Join-Path $CapturePath "$($Trip.TouchId).json"); Eligible = $true; Why = 'Preserve the trip, its signals and the actor context for attribution. Written locally; nothing is sent anywhere.' })
         }
 
-        $licensed = Test-TripwireFeature -Feature 'containment'
-        if ($Execute -and -not $licensed) {
-            $blockers.Add('Automated containment is an EntraTripwire Pro feature. The plan below is complete: every action lists the exact Graph call, so it can be run by hand. See docs/PRO.md.')
+        # Executing the plan is the paid capability, and it is the only part that is. The
+        # plan above was built here, in full, with the exact Graph call for every action,
+        # so it can be run by hand at no cost -- which is why the refusal below says what
+        # the operator still has rather than only what they lack.
+        $canExecute = Test-TripwireProFeature -Feature 'containment'
+        if ($Execute -and -not $canExecute) {
+            $blockers.Add("Executing a containment plan needs EntraTripwirePro, which is not installed. $((Get-TripwireProvider).Reason) The plan below is complete: every action lists the exact Graph call, so it can be run by hand.")
         }
 
-        $willExecute = $Execute -and $licensed -and $blockers.Count -eq 0
+        $willExecute = $Execute -and $canExecute -and $blockers.Count -eq 0
         $performed = [System.Collections.Generic.List[object]]::new()
 
         if ($willExecute) {
+            # Confirmation is answered here, by the command the operator actually invoked,
+            # and only confirmed steps are handed over. The paid module never decides
+            # whether an action was authorised; it issues the ones that were.
+            $confirmed = [System.Collections.Generic.List[object]]::new()
             foreach ($step in $plan) {
                 if (-not $step.Eligible) { continue }
                 $target = "$($Trip.DecoyName) / $($Trip.ActorLabel)"
@@ -140,28 +148,26 @@ function Invoke-TripwireContainment {
                     $performed.Add([pscustomobject]@{ Name = $step.Name; Status = 'Declined'; Detail = 'Not confirmed.' })
                     continue
                 }
-                try {
-                    switch ($step.Name) {
-                        'CaptureContext' {
-                            if (-not (Test-Path -LiteralPath $CapturePath)) { New-Item -ItemType Directory -Path $CapturePath -Force | Out-Null }
-                            $Trip | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $step.Path -Encoding utf8
-                            $performed.Add([pscustomobject]@{ Name = $step.Name; Status = 'Done'; Detail = $step.Path })
-                        }
-                        'DisableDecoy' {
-                            Invoke-TripwireGraphWrite -Method 'PATCH' -Path $step.Path -Body $step.Body | Out-Null
-                            $performed.Add([pscustomobject]@{ Name = $step.Name; Status = 'Done'; Detail = $step.Path })
-                        }
-                        default {
-                            Invoke-TripwireGraphWrite -Method 'POST' -Path $step.Path | Out-Null
-                            $performed.Add([pscustomobject]@{ Name = $step.Name; Status = 'Done'; Detail = $step.Path })
-                        }
-                    }
-                }
-                catch {
+                $confirmed.Add($step)
+            }
+
+            if ($confirmed.Count -gt 0) {
+                # The write gateway goes with the call. It carries this module's session
+                # state, so every write the paid module issues is still checked against the
+                # allowlist in this repository and cannot reach Graph any other way.
+                $results = @(Invoke-TripwireProCapability -Capability 'Containment' -Arguments @{
+                        Step        = $confirmed.ToArray()
+                        Trip        = $Trip
+                        CapturePath = $CapturePath
+                        Writer      = ${function:Invoke-TripwireGraphWrite}
+                    })
+                foreach ($r in $results) {
                     # A failed containment action is reported as failed. It is never folded
                     # into a summary that says the incident was contained.
-                    Write-TripwireLog -Level 'Warn' -Message "Containment step $($step.Name) FAILED: $($_.Exception.Message)"
-                    $performed.Add([pscustomobject]@{ Name = $step.Name; Status = 'Failed'; Detail = $_.Exception.Message })
+                    if ($r.Status -eq 'Failed') {
+                        Write-TripwireLog -Level 'Warn' -Message "Containment step $($r.Name) FAILED: $($r.Detail)"
+                    }
+                    $performed.Add($r)
                 }
             }
         }
@@ -173,7 +179,9 @@ function Invoke-TripwireContainment {
             Confidence  = $Trip.Confidence
             Band        = $Trip.Band
             Mode        = if ($willExecute) { 'Executed' } else { 'DryRun' }
-            Licensed    = $licensed
+            # Kept under its old name so a script that read it does not break. It now
+            # means the paid module is installed and provides containment.
+            Licensed    = $canExecute
             Blockers    = @($blockers)
             Plan        = @($plan)
             Performed   = @($performed)

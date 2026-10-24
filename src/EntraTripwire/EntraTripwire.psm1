@@ -41,6 +41,16 @@ $script:TripwireSession = $null
 # StrictMode reason as the session above.
 $script:TripwireValidatedPolicy = $null
 
+# The paid module's state, resolved once per session by Get-TripwireProvider. Declared
+# here for the same StrictMode reason as the two above: Test-TripwireProFeature reads it
+# before anything has had a chance to assign it.
+$script:TripwireProvider = $null
+
+# Set by Connect-EntraTripwire when a named tenant profile is in use, so each tenant's
+# decoy inventory and baseline stay apart. Null means the shared root, which is where a
+# single-tenant installation keeps its files and where they stay.
+$script:TripwireStateRootOverride = $null
+
 $publicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
 $publicFunctions = @(
     Get-ChildItem -Path $publicPath -Filter '*.ps1' -File -ErrorAction SilentlyContinue |

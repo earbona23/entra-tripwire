@@ -130,3 +130,102 @@ function Clear-GraphStubCall {
     param([Parameter(Mandatory)] $Module)
     & $Module { $script:TestGraphCalls.Clear() }
 }
+
+<#
+.SYNOPSIS
+    Install a stand-in for EntraTripwirePro inside the module's session state.
+
+.DESCRIPTION
+    The paid capabilities live in a separate module, so a test that needs containment to
+    execute has to provide one. This stub does exactly what the real module does -- it
+    issues each confirmed step through the Writer the public module injects -- so every
+    assertion about what did or did not reach Graph still holds, and the Graph stub sees
+    the same calls it saw when the execution loop lived in this repository.
+
+    Capabilities default to all three. Pass an empty array for an installed provider that
+    entitles nothing, which is what a lapsed licence looks like.
+#>
+function Install-ProStub {
+    param(
+        [Parameter(Mandatory)] $Module,
+        [string[]] $Capabilities = @('containment', 'soar', 'multitenant')
+    )
+
+    if (-not $script:RealProCapability) {
+        $script:RealProCapability = & $Module { ${function:Invoke-TripwireProCapability} }
+    }
+
+    . $Module {
+        param($caps)
+
+        $script:TripwireProvider = [pscustomobject]@{
+            Available    = (@($caps).Count -gt 0)
+            Name         = 'EntraTripwirePro'
+            Version      = [version]'1.0.0'
+            Capabilities = @($caps)
+            Reason       = if (@($caps).Count -gt 0) { $null } else { 'EntraTripwirePro is installed but reports no capabilities.' }
+        }
+
+        function script:Invoke-TripwireProCapability {
+            param($Capability, [hashtable] $Arguments)
+
+            if (-not $script:TripwireProvider.Available) { throw $script:TripwireProvider.Reason }
+
+            switch ($Capability) {
+                'Containment' {
+                    $out = [System.Collections.Generic.List[object]]::new()
+                    foreach ($s in $Arguments.Step) {
+                        try {
+                            switch ($s.Name) {
+                                'CaptureContext' {
+                                    if (-not (Test-Path -LiteralPath $Arguments.CapturePath)) {
+                                        New-Item -ItemType Directory -Path $Arguments.CapturePath -Force | Out-Null
+                                    }
+                                    $Arguments.Trip | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $s.Path -Encoding utf8
+                                }
+                                'DisableDecoy' { & $Arguments.Writer -Method 'PATCH' -Path $s.Path -Body $s.Body | Out-Null }
+                                default { & $Arguments.Writer -Method 'POST' -Path $s.Path | Out-Null }
+                            }
+                            $out.Add([pscustomobject]@{ Name = $s.Name; Status = 'Done'; Detail = $s.Path })
+                        }
+                        catch {
+                            $out.Add([pscustomobject]@{ Name = $s.Name; Status = 'Failed'; Detail = $_.Exception.Message })
+                        }
+                    }
+                    return $out.ToArray()
+                }
+                'Webhook' { return $null }
+                'Profile' { return (Join-Path ([IO.Path]::GetTempPath()) "tripwire-profile-$($Arguments.ProfileName)") }
+                'Activate' { return [pscustomobject]@{ Pro = $true; Features = @('containment', 'soar', 'multitenant') } }
+            }
+        }
+    } $Capabilities
+}
+
+<#
+.SYNOPSIS
+    Remove the stand-in and pin the provider as absent.
+
+.DESCRIPTION
+    Pins it rather than clearing it on purpose. Clearing the cache would make the next
+    lookup consult the machine, so these tests would change behaviour the day
+    EntraTripwirePro is installed on the machine running them -- and the gate tests would
+    stop testing the gate without anyone noticing.
+#>
+function Remove-ProStub {
+    param([Parameter(Mandatory)] $Module)
+
+    if ($script:RealProCapability) {
+        . $Module { param($f) Set-Item -Path 'function:script:Invoke-TripwireProCapability' -Value $f } $script:RealProCapability
+    }
+
+    . $Module {
+        $script:TripwireProvider = [pscustomobject]@{
+            Available    = $false
+            Name         = 'EntraTripwirePro'
+            Version      = $null
+            Capabilities = @()
+            Reason       = 'EntraTripwirePro is not installed.'
+        }
+    }
+}

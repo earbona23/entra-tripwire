@@ -134,15 +134,17 @@ $mutants = @(
 '@
         Defect = 'A record with no timestamp is scored for off-hours anyway instead of withholding the signal.'
     }
-    @{ Name = 'licence-empty-features'; File = 'src/EntraTripwire/Private/License.ps1'
-        From = "if (`$r.Payload.PSObject.Properties.Name -contains 'features') {"
-        To = "if (`$r.Payload.PSObject.Properties.Name -contains 'features' -and `$r.Payload.features) {"
-        Defect = 'A licence scoped to an empty feature list grants every Pro feature again.'
+    # The two licence mutants moved with the verifier: entitlement is decided in
+    # EntraTripwirePro now, and its repository carries the mutants for it.
+    @{ Name = 'provider-assumed-present'; File = 'src/EntraTripwire/Private/Provider.ps1'
+        From = "    try { return (@((Get-TripwireProvider).Capabilities) -contains `$Feature) }"
+        To = '    try { return $true }'
+        Defect = 'Every paid capability reads as installed, so containment executes with no module behind it.'
     }
-    @{ Name = 'licence-payload-shape'; File = 'src/EntraTripwire/Private/License.ps1'
-        From = "    if (`$payload -isnot [pscustomobject] -or [string]::IsNullOrWhiteSpace([string]`$payload.sub)) {"
-        To = '    if ($false) {'
-        Defect = 'A signed payload that is not a licence object grants full Pro to no named licensee.'
+    @{ Name = 'provider-ignores-empty-capabilities'; File = 'src/EntraTripwire/Private/Provider.ps1'
+        From = '        Available    = ($caps.Count -gt 0)'
+        To = '        Available    = $true'
+        Defect = 'A paid module that entitles nothing, which is what a lapsed licence looks like, reads as entitled.'
     }
     @{ Name = 'containment-trusts-the-log'; File = 'src/EntraTripwire/Public/Invoke-TripwireContainment.ps1'
         From = '            $decoyObjectId = [string]$Trip.DecoyObjectId'

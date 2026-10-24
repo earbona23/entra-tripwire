@@ -17,6 +17,11 @@ function Get-TripwireStateRoot {
     [OutputType([string])]
     param()
 
+    # A named tenant profile overrides the root, so one tenant's inventory and baseline
+    # are never read while another tenant is connected. Resolved by EntraTripwirePro and
+    # set by Connect-EntraTripwire; absent, everything resolves as it always has.
+    if ($script:TripwireStateRootOverride) { return $script:TripwireStateRootOverride }
+
     if ($env:ENTRATRIPWIRE_CONFIG_DIR) { $base = $env:ENTRATRIPWIRE_CONFIG_DIR }
     elseif ($IsWindows) { $base = $env:APPDATA }
     elseif ($IsMacOS) { $base = Join-Path $HOME 'Library/Application Support' }

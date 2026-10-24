@@ -34,11 +34,25 @@ Describe 'There are exactly two ways to reach Microsoft Graph' {
         $src | Should -Not -Match '\$Body'
     }
 
-    It 'the only non-Graph outbound call in the module is the operator-supplied webhook' {
+    It 'makes no outbound call at all other than Microsoft Graph' {
+        # Stronger than it was: webhook delivery moved to EntraTripwirePro, so this module
+        # now has no non-Graph egress whatsoever. An operator auditing what leaves the
+        # machine has two gateways to read and nothing else.
         $callers = @($script:Files | Where-Object {
                 (Get-Content -LiteralPath $_.FullName -Raw) -match 'Invoke-RestMethod|Invoke-WebRequest'
             } | ForEach-Object { $_.Name } | Sort-Object)
-        $callers | Should -Be @('Send-TripwireWebhook.ps1')
+        $callers | Should -BeNullOrEmpty
+    }
+
+    It 'holds no licence verification code, so there is no check here to remove' {
+        # The paid capabilities are not in this repository, which is the whole point of the
+        # split: a gate inside an MIT module is a line anyone may delete, and deleting it
+        # would uncover working code. There is nothing to uncover.
+        foreach ($f in $script:Files) {
+            $src = Get-Content -LiteralPath $f.FullName -Raw
+            $src | Should -Not -Match 'ECDsa|ImportSubjectPublicKeyInfo|VerifyData' `
+                -Because "$($f.Name) must not verify a signature; entitlement lives in EntraTripwirePro"
+        }
     }
 
     It 'no source file contains a network probe aimed at an observed address' {
