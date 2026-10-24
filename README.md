@@ -423,7 +423,7 @@ watching, the whole confidence engine, the report, and the full containment plan
 - **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** — any amount.
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
   multi-tenant, as a separate module. Built for teams who live in this module. From
-  **US$49/mo per organisation**, or US$99 for all four tools —
+  **US$49/mo per organisation**, or US$99/mo for the Suite plan —
   **[pricing and purchase](https://consulting.arrankago.com)**, details in
   [docs/PRO.md](docs/PRO.md).
 

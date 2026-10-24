@@ -94,8 +94,9 @@ ten times the monthly one. Unlimited users within the seat band.
 | **Monthly** | **$49** | **$149** | **$449** | contact |
 | **Annual** | $490 | $1,490 | $4,490 | contact |
 
-All four tools together, as the suite, is **$99** Solo, **$349** Team and **$999** Business per
-month, which is the better deal if you already use more than one of them.
+The **Suite (all tools)** plan is **$99** Solo, **$349** Team and **$999** Business per month,
+which is the better deal if you use more than one of them. What that plan covers is listed on the
+site, since which tools have a paid tier changes as they ship one.
 
 **[Buy at consulting.arrankago.com](https://consulting.arrankago.com)**, or email
 **earbona@arrankago.com** with the organisation name to put on the licence. Those figures are the
