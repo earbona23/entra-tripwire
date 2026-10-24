@@ -40,7 +40,7 @@ to uncover: a fork has to write them, not remove a check.
 
 What stays in the free module on purpose, and what you can therefore audit yourself:
 
-| Stays free and readable | Why it matters to you |
+| In this repository, and readable | Why it matters to you |
 |---|---|
 | Every verdict: detection, scoring, suppression, the plan | No paid code can change what your tenant is told about itself |
 | The Graph write allowlist | The paid module writes **through** it, so it cannot issue a call the free module forbids |
@@ -68,7 +68,8 @@ and a lapsed licence that keeps working is the failure direction that costs some
 **$49 per organisation per month** for Solo, with the full matrix under [Pricing](#pricing) below.
 
 Or email **earbona@arrankago.com** with the organisation name to put on the licence. You get the
-module and, where the licence is time-limited, its key, usually the same day.
+module and, where the licence is time-limited, its key. One person issues these by hand, so
+no turnaround is promised here; buying through the site is the faster path.
 
 Managed security and M365/Entra identity assessments are on the same site if you would rather have
 the work done than run the module yourself.

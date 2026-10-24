@@ -1,9 +1,9 @@
 # Sponsors
 
-Nothing that decides a verdict sits behind a licence: planting, watching, the whole
-confidence engine, the report and the full containment plan are in this repository and are
-free to use. The terms themselves are in [LICENSING.md](LICENSING.md), which is the document
-that governs; this page is thanks, not terms.
+This page is thanks. It is not terms, and it deliberately makes no statement about what is
+or will be covered by which licence — that belongs in one place, in the words that actually
+govern it: **[LICENSING.md](LICENSING.md)**. What is in this repository, what is in the paid
+module, and what a licence change could and could not do are all answered there.
 
 What sponsorship pays for is the part with an ongoing cost: keeping the rule catalogue
 current, tracking the Microsoft Graph and platform changes that quietly break a check,

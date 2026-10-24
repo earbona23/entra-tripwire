@@ -6,7 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `docs/distribution.md` — how this module is installed and run, measured against the
+  alternatives. It answers whether a standalone `.exe` is worth shipping (it is not: a
+  signature does not remove the SmartScreen warning, and Microsoft states that EV no longer
+  bypasses it), establishes that a PowerShell module **cannot** be published to WinGet at
+  all, and records what the paid boundary does and does not protect.
+
 ### Changed
+
+- **The test and mutation counts in this file and in the README were stale.** The suite is
+  **152 tests across eight files**, and the mutation harness runs **31 mutants, 31 killed,
+  0 survived, 0 not applied**. The README badge still read `17/17` from the 1.0.0 release.
+- Manifest metadata, for discoverability on the PowerShell Gallery: the `Description` now
+  leads with the problem rather than the architecture and states that
+  `Microsoft.Graph.Authentication` is needed only to connect a real tenant, which the
+  Gallery's empty "Dependencies" section cannot convey on its own; `ReleaseNotes` carries
+  the notes themselves instead of a bare link, because the Gallery renders that field as
+  text; and the `Windows` and `Linux` platform tags were added, since both are proven by CI
+  on every push. macOS is not tested and so is not tagged. No exported command changed.
+- The README now states what an operator ends up with — the self-contained HTML report —
+  and lists the Graph scopes with the reason for each one inline, rather than only linking
+  to them. It also documents the two things the install actually requires of a first-time
+  user: the PowerShell Gallery's untrusted-repository prompt, whose default answer is `N`,
+  and `Update-Module` as the update path, since the Gallery has no way to notify an
+  installed user that a new version exists.
+- Statements about what any licence covers now live only in `LICENSING.md`. `SPONSORS.md`
+  made such a statement and no longer does: it is a thanks page, not terms.
 
 - **The paid capabilities moved out of this repository.** Containment execution, SOAR/SIEM
   delivery and per-tenant profile isolation are now a separate module, `EntraTripwirePro`,

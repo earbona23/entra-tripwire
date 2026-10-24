@@ -7,7 +7,7 @@
     CompanyName       = 'ArrankaGo LLC'
     Copyright         = '(c) 2026 Eduard Arbona. Released under the MIT licence.'
 
-    Description       = 'Deception-based intrusion detection for Microsoft Entra ID. Plants decoy identities, application registrations and credentials that no legitimate process should ever touch, watches Microsoft Graph sign-in and directory audit logs for contact with them, and scores every touch through a calibrated false-positive suppression engine before it reaches a human. Optional containment is dry-run by default and never acts on a degraded or low-confidence signal.'
+    Description       = 'Detects an intruder who is already inside a Microsoft Entra ID tenant. Plants decoy users, application registrations and client secrets that no legitimate process should ever touch, watches the Microsoft Graph sign-in and directory audit logs for contact with them, and scores every touch through a calibrated false-positive suppression engine before it reaches a human, so a deception deployment does not page its operator into switching it off. Answers "is someone in here right now?", which is a different question from "how could someone get in". Runs with no dependency and no tenant in DEMO mode against fixtures shipped inside the module; Microsoft.Graph.Authentication is loaded lazily and is only needed to connect a real tenant. Optional containment is dry-run by default, requires a High and non-degraded confidence band, and never acts on a signal it could not fully evaluate.'
 
     PowerShellVersion = '7.2'
 
@@ -39,10 +39,17 @@
 
     PrivateData = @{
         PSData = @{
-            Tags         = @('Entra', 'EntraID', 'AzureAD', 'MicrosoftGraph', 'Security', 'Deception', 'Honeytoken', 'Honeypot', 'DetectionEngineering', 'IncidentResponse', 'BlueTeam', 'PSEdition_Core')
+            # Platform tags put the package into the Gallery's search filters. Only Windows
+            # and Linux are claimed: both are proven by CI on every push. macOS is not
+            # tested, so it is not tagged.
+            Tags         = @('Entra', 'EntraID', 'AzureAD', 'MicrosoftGraph', 'Microsoft365', 'Security', 'Deception', 'Honeytoken', 'Honeypot', 'ThreatDetection', 'DetectionEngineering', 'IncidentResponse', 'BlueTeam', 'PSEdition_Core', 'Windows', 'Linux')
             LicenseUri   = 'https://github.com/earbona23/entra-tripwire/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/earbona23/entra-tripwire'
-            ReleaseNotes = 'https://github.com/earbona23/entra-tripwire/blob/main/CHANGELOG.md'
+
+            # The Gallery renders this field as the release notes themselves, not as a link,
+            # so a bare URL here shows a reader a URL where they expected to read what
+            # changed. Summary first, link second.
+            ReleaseNotes = '1.0.0 - First release. Decoy planting (users, application registrations, client secrets), detection across the sign-in and directory audit logs, the four-signal confidence engine with suppression and withheld-signal tracking, tenant baselining with impossible-travel detection, the containment plan, the self-contained HTML report, and DEMO mode against shipped fixtures. Full history: https://github.com/earbona23/entra-tripwire/blob/main/CHANGELOG.md'
         }
     }
 }

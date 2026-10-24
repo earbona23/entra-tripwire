@@ -11,10 +11,16 @@
 [![Downloads](https://img.shields.io/powershellgallery/dt/EntraTripwire?label=installs&color=2f855a)](https://www.powershellgallery.com/packages/EntraTripwire)
 [![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-blue.svg)](LICENSE)
-[![Mutation tested](https://img.shields.io/badge/mutation-17%2F17%20killed-2f855a)](docs/scoring.md#mutation-testing)
+[![Mutation tested](https://img.shields.io/badge/mutation-31%2F31%20killed-2f855a)](docs/scoring.md#mutation-testing)
+[![Tests](https://img.shields.io/badge/tests-152%20passing-2f855a)](#development-tests-and-mutation-testing)
 [![Runs with no tenant](https://img.shields.io/badge/DEMO-no%20tenant%20required-0f6e6e)](#five-minutes-no-tenant)
 
 **Deception-based intrusion detection for Microsoft Entra ID.**
+
+**In one sentence, if you have never heard of this:** it plants fake user accounts and fake
+app credentials in your tenant — objects no real person and no real process has any reason
+to touch — and tells you when something touches one. Because the only thing that touches
+them is somebody looking around who should not be there.
 
 Plant identities, application registrations and credentials that no legitimate process
 should ever touch. Watch Microsoft Graph for contact with them. When something touches one,
@@ -30,6 +36,15 @@ hypothetical:
 Install-Module EntraTripwire -Scope CurrentUser
 Watch-TripwireActivity -Demo | Format-Table Confidence, Band, DecoyName, ActorLabel
 ```
+
+No elevation, and nothing else to install. The PowerShell Gallery is not a trusted
+repository by default, so the first install asks you to confirm it and **the default answer
+is `N`** — answer `Y`. Later, `Update-Module EntraTripwire` takes you to the newest version;
+the Gallery has no mechanism to notify you that one exists, so that is a command you run
+rather than a prompt you receive.
+
+Why a Gallery module and not a downloadable `.exe`, with the measurements behind that
+choice: **[docs/distribution.md](docs/distribution.md)**.
 
 ```
 Confidence Band       DecoyName            ActorLabel
@@ -57,6 +72,7 @@ That output came from the fixtures inside the module. No tenant, no credentials,
 - [How it works](#how-it-works)
 - [The interesting part: the false-positive engine](#the-interesting-part-the-false-positive-engine)
 - [Reading that demo output](#reading-that-demo-output)
+- [What you actually end up with](#what-you-actually-end-up-with)
 - [Against a real tenant](#against-a-real-tenant)
 - [Containment](#containment)
 - [Safety properties](#safety-properties)
@@ -239,6 +255,28 @@ Full calibration, with the reasoning behind every number: **[docs/scoring.md](do
 Suppressed trips are still returned and still shown, with their reason. A suppression rule
 that *hides* evidence is indistinguishable from a bug that *loses* it.
 
+## What you actually end up with
+
+A single self-contained HTML file. No server, no portal, no account, no JavaScript fetched
+from anywhere — one file you can open, email, or attach to an incident ticket.
+
+```powershell
+Watch-TripwireActivity -Days 1 | Export-TripwireReport -Path ./tripwire.html
+```
+
+**There is a rendered one you can look at before installing anything:
+[`docs/images/sample-report.html`](docs/images/sample-report.html).**
+
+Each trip in it carries the four signal rows that produced its score, with the raw value,
+the weight, whether the signal was available at all, and a sentence of rationale — so the
+report answers "why is this 99.6 and that one 34.6" on its own, without the reader having
+to trust the number or come back to ask. Suppressed trips are included, with the reason
+they were suppressed, for the same reason.
+
+That file is the deliverable for everyone who will never open PowerShell: the manager, the
+client, the auditor. `Export-TripwireReport` also writes JSON for a pipeline that wants the
+same data structured.
+
 ## Against a real tenant
 
 ```powershell
@@ -260,7 +298,33 @@ New-TripwireDecoy -Type User -DisplayName 'p.morales' -ObjectId <id> -RegisterOn
 Watch-TripwireActivity -Days 1 | Export-TripwireReport -Path ./tripwire.html
 ```
 
-Scopes per mode, and why each one: **[docs/permissions.md](docs/permissions.md)**.
+### What it asks for, and why each one
+
+Consent follows the mode you ask for, so an operator who only wants detection is never
+asked to consent to a write. These are the only scopes requested, in any mode:
+
+| Scope | Detect | Plant | Contain | Why it is needed |
+|---|:--:|:--:|:--:|---|
+| `AuditLog.Read.All` | yes | yes | yes | Read the sign-in and directory audit logs. Without it a decoy touch cannot be observed at all — this is the whole detection. |
+| `Directory.Read.All` | yes | yes | yes | Resolve an actor and a target to a real directory object, and build the tenant's own baseline of countries, networks and working hours. |
+| `User.ReadWrite.All` | — | yes | yes | Create and delete decoy users; during containment, disable an identity and revoke its sessions. |
+| `Application.ReadWrite.OwnedBy` | — | yes | yes | Create and delete decoy application registrations. `OwnedBy`, not the tenant-wide variant, because the module only ever manages applications it created itself. |
+
+Two things it is worth being explicit about, because "read the logs" and "write to the
+directory" are the scopes administrators are rightly slowest to grant:
+
+- **The write surface is eight enumerated Graph operations**, listed in full in
+  [docs/permissions.md](docs/permissions.md). Anything else throws before a request leaves
+  the machine, and the only PATCH body the gateway permits is `{"accountEnabled": false}` —
+  so it can disable an identity and is structurally incapable of enabling one.
+- **Nothing it asks for grants privilege.** No role assignment, no app role assignment, no
+  consent grant, no group membership, no authentication method, no key. Each is asserted
+  refused by name in the test suite.
+- **It never asks for** `Mail.Read`, `Files.Read.All`, `Policy.ReadWrite.*`,
+  `RoleManagement.*`, `AppRoleAssignment.*` or `Directory.ReadWrite.All`.
+
+Full table with the reasoning, plus how to register a scheduled watcher with the narrowest
+possible identity: **[docs/permissions.md](docs/permissions.md)**.
 How to name and seed decoys so they actually get taken: **[docs/deception-design.md](docs/deception-design.md)**.
 
 Before you turn on alerting, run it for a few days and put your own scanners into
@@ -417,8 +481,10 @@ Stated plainly, because a detector that oversells its coverage is worse than one
 
 ## Support the project
 
-entra-tripwire is free and MIT-licensed, and everything that detects stays free — planting,
-watching, the whole confidence engine, the report, and the full containment plan.
+entra-tripwire is free and MIT-licensed. Everything that detects is in this repository under
+that licence — planting, watching, the whole confidence engine, the report, and the full
+containment plan. What that licence does and does not commit the project to, in the words
+that actually govern it, is in **[LICENSING.md](LICENSING.md)**.
 
 - **[Sponsor on GitHub](https://github.com/sponsors/earbona23)** — any amount.
 - **[EntraTripwire Pro](docs/PRO.md)** — automated containment, SOAR/SIEM delivery and
