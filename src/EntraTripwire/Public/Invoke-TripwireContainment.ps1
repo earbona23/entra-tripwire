@@ -22,7 +22,11 @@
       * Revoke the actor's refresh tokens (POST users/{id}/revokeSignInSessions), only when
         the actor is a directory principal in this tenant.
       * Disable the decoy that was touched, so a credential that is now known to be in an
-        intruder's hands stops working.
+        intruder's hands stops working. The object id disabled is the one recorded in the
+        LOCAL decoy inventory, and the action is refused outright when the sign-in record
+        names a different principal than the inventory does. A log record is shaped by the
+        actor it describes; the inventory is the only thing in this system that knows what
+        is bait, so it is the only thing allowed to nominate an object for disabling.
       * Write an incident capture to disk: the trip, its signals, the actor context.
 
     What it will NEVER do, by construction rather than by policy: contact, probe, scan or
@@ -88,10 +92,28 @@ function Invoke-TripwireContainment {
         }
 
         if ($Action -contains 'DisableDecoy') {
-            $decoyObjectId = [string]$Trip.Touch.actor.id
-            if ($Trip.Touch.source -ne 'SignInLog') { $decoyObjectId = '' }
-            if ([string]::IsNullOrWhiteSpace($decoyObjectId)) {
-                $plan.Add([pscustomobject]@{ Name = 'DisableDecoy'; Method = $null; Path = $null; Eligible = $false; Why = 'The touch came from the directory audit log, so the decoy was read rather than used. Disabling it would only tell the intruder they were seen.' })
+            # The object id comes from the LOCAL INVENTORY, never from the log record. A
+            # log record is shaped by the actor it describes, and the decoy index matches
+            # on four different identifiers, so "the principal named in this record" and
+            # "the decoy I planted" are not guaranteed to be the same object. Only the
+            # inventory knows what is bait, and this gateway will only disable bait.
+            $decoyObjectId = [string]$Trip.DecoyObjectId
+            $refusal = $null
+            if ($Trip.Touch.source -ne 'SignInLog') {
+                $refusal = 'The touch came from the directory audit log, so the decoy was read rather than used. Disabling it would only tell the intruder they were seen.'
+            }
+            elseif ([string]::IsNullOrWhiteSpace($decoyObjectId)) {
+                $refusal = "Decoy '$($Trip.DecoyName)' has no object id in the local inventory, so there is no object this tool can prove is bait. Re-register it with New-TripwireDecoy -RegisterOnly -ObjectId."
+            }
+            elseif ($Trip.DecoyType -ne 'User') {
+                $refusal = "Decoy '$($Trip.DecoyName)' is of type '$($Trip.DecoyType)'. Only a decoy user is disabled automatically; disabling an application means disabling its service principal, whose object id this tool does not hold. Revoke the credential in the portal."
+            }
+            elseif ($decoyObjectId -ne $actorId) {
+                $refusal = "The sign-in record names principal '$actorId', but the inventory records decoy '$($Trip.DecoyName)' as object '$decoyObjectId'. They disagree, so EntraTripwire will not disable either. Reconcile the inventory before containing by hand."
+            }
+
+            if ($refusal) {
+                $plan.Add([pscustomobject]@{ Name = 'DisableDecoy'; Method = $null; Path = $null; Eligible = $false; Why = $refusal })
             }
             else {
                 $plan.Add([pscustomobject]@{ Name = 'DisableDecoy'; Method = 'PATCH'; Path = "/v1.0/users/$decoyObjectId"; Body = @{ accountEnabled = $false }; Eligible = $true; Why = "Decoy '$($Trip.DecoyName)' was authenticated with, so its credential is in an intruder's hands." })

@@ -31,10 +31,22 @@
 
 .PARAMETER Override
     A hashtable merged over the defaults, e.g. @{ ImpossibleTravelKph = 1200 }. Only
-    top-level keys are replaced; pass a whole sub-object to change part of one.
+    top-level keys are replaced; pass a whole sub-object carrying ALL of its members to
+    change part of one.
+
+    The result is validated and an incomplete one is refused by name, because the
+    alternative is silent: a Threshold object handed in without its High member leaves
+    that member $null, and `50 -ge $null` is $true in PowerShell -- so the typo bands
+    every trip High, which is the only band containment acts on. Start from
+    (Get-TripwirePolicy).Threshold and change what you need.
 
 .EXAMPLE
     Get-TripwirePolicy | ConvertTo-Json -Depth 6
+
+.EXAMPLE
+    # Changing one threshold: copy the whole object, because the merge is by top-level key.
+    $t = (Get-TripwirePolicy).Threshold
+    Get-TripwirePolicy -Override @{ Threshold = [pscustomobject]@{ High = 80; Medium = $t.Medium } }
 #>
 function Get-TripwirePolicy {
     [CmdletBinding()]
@@ -99,5 +111,17 @@ function Get-TripwirePolicy {
         foreach ($key in $Override.Keys) { $policy[$key] = $Override[$key] }
     }
 
-    return [pscustomobject]$policy
+    $result = [pscustomobject]$policy
+
+    # An override is a whole-key replacement, so a sub-object handed in without one of its
+    # members leaves that member $null -- and a $null threshold bands every trip High,
+    # because `50 -ge $null` is $true in PowerShell. The override is validated here, at the
+    # moment it is made, rather than discovered later as a detector that contains everything.
+    #
+    # Only when an override was given. The defaults above are literals in this file and
+    # tests/Scoring.Tests.ps1 asserts their shape; re-walking them on every call cost 7 ms
+    # a time, and Measure-TripwireConfidence builds a default policy once per touch.
+    if ($Override) { Assert-TripwirePolicy -Policy $result }
+
+    return $result
 }

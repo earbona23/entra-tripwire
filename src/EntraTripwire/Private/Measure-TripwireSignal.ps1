@@ -37,9 +37,22 @@ function Measure-TripwireDecoyPuritySignal {
             -Rationale 'The touched object is not in the decoy inventory, so its purity is unknown.'
     }
 
-    $uses = $Decoy.legitimateUseCount
-    if ($null -eq $uses) { $uses = 0 }
-    $uses = [int]$uses
+    # legitimateUseCount is the one field in the inventory the operator is told to edit by
+    # hand (see .DESCRIPTION), which makes it the one field that can arrive as 'three'.
+    # [int] on that throws, and it throws inside the DOMINANT signal, so one typo in a
+    # JSON file took down scoring for every touch. Unreadable is not zero: a purity we
+    # cannot establish is withheld, which marks the trip degraded and keeps containment
+    # off it, rather than asserting the decoy is pristine.
+    $uses = 0
+    if ($null -ne $Decoy.legitimateUseCount) {
+        $parsed = 0
+        if (-not [int]::TryParse([string]$Decoy.legitimateUseCount, [ref] $parsed)) {
+            return New-TripwireSignal -Name 'DecoyPurity' -Weight $weight -Available $false -Rationale (
+                "Decoy '$($Decoy.displayName)' records legitimateUseCount as '$($Decoy.legitimateUseCount)', which is not a whole number. Its purity cannot be established; fix the inventory record.")
+        }
+        $uses = $parsed
+    }
+    if ($uses -lt 0) { $uses = 0 }
 
     foreach ($tier in $Policy.PurityTiers) {
         if ($uses -le $tier.MaxUses) {
@@ -98,7 +111,11 @@ function Measure-TripwireOriginSignal {
     if ($null -ne $lastSeen -and $null -ne $Touch.latitude -and $null -ne $lastSeen.latitude) {
         $km = Get-TripwireDistanceKm -Lat1 $lastSeen.latitude -Lon1 $lastSeen.longitude `
             -Lat2 $Touch.latitude -Lon2 $Touch.longitude
-        $hours = ((ConvertTo-TripwireUtc $Touch.timestamp) - (ConvertTo-TripwireUtc $lastSeen.timestamp)).TotalHours
+        # Both times must resolve. Subtracting a DateTime from $null throws, which would
+        # abandon the whole batch over one record that merely lacks a usable timestamp.
+        $touchAt = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+        $seenAt = ConvertTo-TripwireUtcOrNull $lastSeen.timestamp
+        $hours = if ($null -ne $touchAt -and $null -ne $seenAt) { ($touchAt - $seenAt).TotalHours } else { 0 }
         if ($null -ne $km -and $hours -gt 0) {
             $kph = $km / $hours
             if ($kph -gt $Policy.ImpossibleTravelKph) {
@@ -230,7 +247,17 @@ function Measure-TripwireOffHoursSignal {
             -Rationale 'The baseline histogram is empty, so no hour is more normal than another.'
     }
 
-    $hour = (ConvertTo-TripwireUtc $Touch.timestamp).Hour
+    # A touch with no usable timestamp has no hour to compare. Indexing the histogram with
+    # the $null that came back raised "the array index evaluated to null" and killed the
+    # run; treating it as hour 0 would have been worse -- 00:00 is the deadest hour in most
+    # tenants, so an absent timestamp would have scored as maximum off-hours anomaly.
+    $at = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+    if ($null -eq $at) {
+        return New-TripwireSignal -Name 'OffHours' -Weight $weight -Available $false `
+            -Rationale 'This record carries no usable timestamp, so the hour it happened in cannot be compared with the tenant norm.'
+    }
+
+    $hour = $at.Hour
     $density = $values[$hour] / $peak
     $raw = 1.0 - $density
 
@@ -274,8 +301,13 @@ function Test-TripwireSuppression {
 
     # 2. Provisioning self-noise. Planting a decoy writes an audit record in which the
     #    planter touches the decoy. Without this rule every deployment starts with a page.
-    if ($null -ne $Decoy -and $null -ne $Decoy.plantedAt -and -not [string]::IsNullOrWhiteSpace([string]$Decoy.plantedBy)) {
-        $sincePlant = ((ConvertTo-TripwireUtc $Touch.timestamp) - (ConvertTo-TripwireUtc $Decoy.plantedAt)).TotalMinutes
+    #    Both times must resolve. This rule HIDES evidence, so when it cannot establish
+    #    that the touch really falls inside the grace window it must decline to suppress --
+    #    a suppression rule that fires on an unknown is a way to lose an intrusion quietly.
+    $touchAt = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+    $plantedAt = if ($null -ne $Decoy) { ConvertTo-TripwireUtcOrNull $Decoy.plantedAt } else { $null }
+    if ($null -ne $touchAt -and $null -ne $plantedAt -and -not [string]::IsNullOrWhiteSpace([string]$Decoy.plantedBy)) {
+        $sincePlant = ($touchAt - $plantedAt).TotalMinutes
         $planter = [string]$Decoy.plantedBy
         $isPlanter = ($planter -eq $actorId) -or ($planter -eq [string]$Touch.actor.upn)
         if ($isPlanter -and $sincePlant -ge 0 -and $sincePlant -le $Policy.ProvisioningGraceMinutes) {

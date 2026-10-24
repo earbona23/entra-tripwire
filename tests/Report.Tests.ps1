@@ -102,3 +102,31 @@ Describe 'Export' {
         Test-Path -LiteralPath $out | Should -BeFalse
     }
 }
+
+Describe 'A trip the scoring engine could place no clock on' {
+
+    # The report sits downstream of every tolerance the engine has. A touch with no
+    # resolvable timestamp is scored (with the clock-dependent signals withheld) rather
+    # than dropped, so it reaches here -- and .ToString() on the absent value took the
+    # whole report down with it.
+    It 'renders rather than throwing, and says the timestamp is missing' {
+        $touch = New-TestTouch -Id 'no-time'
+        $touch.timestamp = $null
+        $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+
+        $out = Join-Path ([System.IO.Path]::GetTempPath()) ("r-{0}.html" -f [Guid]::NewGuid())
+        { $trip | Export-TripwireReport -Path $out -Confirm:$false | Out-Null } | Should -Not -Throw
+        $html = Get-Content -LiteralPath $out -Raw
+        $html | Should -Match 'no timestamp in the source record'
+        Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
+    }
+
+    It 'renders a JSON export of the same trip' {
+        $touch = New-TestTouch -Id 'no-time'
+        $touch.timestamp = $null
+        $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        $out = Join-Path ([System.IO.Path]::GetTempPath()) ("r-{0}.json" -f [Guid]::NewGuid())
+        { $trip | Export-TripwireReport -Format Json -Path $out -Confirm:$false | Out-Null } | Should -Not -Throw
+        Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
+    }
+}

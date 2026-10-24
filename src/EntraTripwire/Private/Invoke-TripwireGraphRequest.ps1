@@ -19,8 +19,12 @@ function Invoke-TripwireGraphRequest {
         [Parameter(Mandatory)]
         [string] $Uri,
 
+        # MaxPages 0 would fetch nothing and report success. Truncation is already warned
+        # about; fetching no pages at all must not even be expressible.
+        [ValidateRange(1, 10000)]
         [int] $MaxPages = 50,
 
+        [ValidateRange(0, 10)]
         [int] $MaxRetry = 4
     )
 

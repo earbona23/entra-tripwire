@@ -41,7 +41,10 @@ function Get-TripwireBaseline {
     [OutputType([pscustomobject])]
     param(
         [Parameter(ParameterSetName = 'Build', Mandatory)] [switch] $Build,
-        [Parameter(ParameterSetName = 'Build')] [int] $Days = 30,
+        # Same reason as Watch-TripwireActivity: a non-positive window silently builds a
+        # baseline from zero records, and a zero baseline withholds two of the four signals
+        # on every trip from then on.
+        [Parameter(ParameterSetName = 'Build')] [ValidateRange(1, 365)] [int] $Days = 30,
         [Parameter(ParameterSetName = 'Build')] [switch] $Save,
         [Parameter(ParameterSetName = 'Load')] [switch] $Demo,
         [Parameter(ParameterSetName = 'Load')] [string] $Path
@@ -68,13 +71,19 @@ function Get-TripwireBaseline {
     $hours = @(0) * 24
     $lastSeen = @{}
 
+    $undated = 0
+
     foreach ($r in $records) {
         # Only successful interactive sign-ins describe where the tenant actually works.
         # Failures describe where it is being attacked from, and folding those into the
         # baseline would teach the detector that the attacker's country is normal.
         if ($null -eq $r.status -or [int]$r.status.errorCode -ne 0) { continue }
 
-        $when = ConvertTo-TripwireUtc $r.createdDateTime
+        # A record with no usable date cannot go in the hour histogram -- and must not
+        # take the rest of the baseline down with it, which an unguarded parse did.
+        # It is counted and reported, never silently discarded.
+        $when = ConvertTo-TripwireUtcOrNull $r.createdDateTime
+        if ($null -eq $when) { $undated++; continue }
         $hours[$when.Hour] += 1
 
         $c = if ($null -ne $r.location) { [string]$r.location.countryOrRegion } else { '' }
@@ -92,7 +101,8 @@ function Get-TripwireBaseline {
         $uid = [string]$r.userId
         if (-not [string]::IsNullOrWhiteSpace($uid) -and $null -ne $r.location -and $null -ne $r.location.geoCoordinates) {
             $prev = $lastSeen[$uid]
-            if ($null -eq $prev -or (ConvertTo-TripwireUtc $prev.timestamp) -lt $when) {
+            $prevAt = if ($null -ne $prev) { ConvertTo-TripwireUtcOrNull $prev.timestamp } else { $null }
+            if ($null -eq $prev -or $null -eq $prevAt -or $prevAt -lt $when) {
                 $lastSeen[$uid] = @{
                     timestamp = $when.ToString('o')
                     country   = $c
@@ -112,6 +122,10 @@ function Get-TripwireBaseline {
         hourHistogram    = $hours
         actorLastSeen    = $lastSeen
         suppressedActors = @()
+    }
+
+    if ($undated -gt 0) {
+        Write-TripwireLog -Level 'Warn' -Message "$undated successful sign-in(s) carried no usable timestamp and are not in the hour histogram. The off-hours signal is calibrated on the rest."
     }
 
     if ([int]$baseline.totalSignIns -eq 0) {

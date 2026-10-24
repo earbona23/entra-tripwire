@@ -40,3 +40,34 @@ function ConvertTo-TripwireUtc {
         [System.Globalization.DateTimeStyles]::AssumeUniversal)
     return $parsed.UtcDateTime
 }
+
+<#
+.SYNOPSIS
+    ConvertTo-TripwireUtc, but a timestamp that cannot be resolved returns $null instead of
+    throwing.
+
+.DESCRIPTION
+    Graph omits properties rather than nulling them, and a log record that reaches this
+    module with no usable timestamp is a fact about the tenant, not a reason to abandon
+    the run. ConvertTo-TripwireUtc throws on an unparseable value, which is right for code
+    that cannot proceed without a time; every scoring path that CAN proceed -- by
+    withholding the signals that need a clock -- goes through this one instead.
+
+    The failure mode this replaces is the worst one a detector has: a single malformed
+    record raised a terminating error out of Invoke-TripwireAnalysis and took every other
+    scored trip in the batch with it, so a run that found intrusions returned nothing and
+    looked exactly like a quiet tenant.
+
+    Returns $null for: $null, an empty string, and anything that does not parse as a date.
+#>
+function ConvertTo-TripwireUtcOrNull {
+    [CmdletBinding()]
+    [OutputType([DateTime])]
+    param([Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] $Value)
+
+    if ($null -eq $Value) { return $null }
+    if (($Value -is [string]) -and [string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+    try { return ConvertTo-TripwireUtc $Value }
+    catch { return $null }
+}

@@ -44,13 +44,17 @@ function Watch-TripwireActivity {
     [OutputType([pscustomobject])]
     param(
         [switch] $Demo,
-        [int] $Days = 1,
+
+        # A zero or negative window puts the Graph $filter in the future, so the query
+        # returns nothing and the run reports no touches. That is indistinguishable from a
+        # quiet tenant, which is the one answer a detector must never give by accident.
+        [ValidateRange(1, 365)] [int] $Days = 1,
         [object[]] $Decoy,
         [AllowNull()] $Baseline,
         $Policy
     )
 
-    if (-not $Policy) { $Policy = Get-TripwirePolicy }
+    $Policy = Resolve-TripwirePolicy -Policy $Policy
     if (-not $Decoy) { $Decoy = @(Get-TripwireDecoy -Demo:$Demo) }
     if (-not $PSBoundParameters.ContainsKey('Baseline')) { $Baseline = Get-TripwireBaseline -Demo:$Demo }
 

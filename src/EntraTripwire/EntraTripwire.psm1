@@ -36,6 +36,11 @@ foreach ($folder in @('Private', 'Public')) {
 # promises works with no tenant.
 $script:TripwireSession = $null
 
+# Remembers which policy object has already passed Assert-TripwirePolicy, so scoring a
+# large batch validates once rather than once per touch. Declared here for the same
+# StrictMode reason as the session above.
+$script:TripwireValidatedPolicy = $null
+
 $publicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
 $publicFunctions = @(
     Get-ChildItem -Path $publicPath -Filter '*.ps1' -File -ErrorAction SilentlyContinue |

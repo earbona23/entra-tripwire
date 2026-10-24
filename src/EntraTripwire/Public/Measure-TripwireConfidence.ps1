@@ -55,9 +55,16 @@ function Measure-TripwireConfidence {
         $Policy
     )
 
-    if (-not $Policy) { $Policy = Get-TripwirePolicy }
+    $Policy = Resolve-TripwirePolicy -Policy $Policy
 
     $decoyName = if ($null -ne $Decoy) { [string]$Decoy.displayName } else { "unknown decoy ($($Touch.decoyId))" }
+
+    # Carried on the trip so containment never has to take the identity of the object it
+    # is about to disable from a log record. Log records describe what an actor did and
+    # are shaped by that actor; the local inventory is the only thing that knows what is
+    # bait. Absent here means the decoy is not in the inventory, and containment refuses.
+    $decoyObjectId = if ($null -ne $Decoy) { [string]$Decoy.objectId } else { '' }
+    $decoyType = if ($null -ne $Decoy) { [string]$Decoy.type } else { '' }
     $actorLabel = if (-not [string]::IsNullOrWhiteSpace([string]$Touch.actor.displayName)) {
         [string]$Touch.actor.displayName
     }
@@ -70,6 +77,8 @@ function Measure-TripwireConfidence {
             TouchId           = [string]$Touch.id
             DecoyId           = [string]$Touch.decoyId
             DecoyName         = $decoyName
+            DecoyObjectId     = $decoyObjectId
+            DecoyType         = $decoyType
             ActorLabel        = $actorLabel
             ActorKey          = Get-TripwireActorKey -Touch $Touch
             Touch             = $Touch
@@ -104,6 +113,8 @@ function Measure-TripwireConfidence {
         TouchId           = [string]$Touch.id
         DecoyId           = [string]$Touch.decoyId
         DecoyName         = $decoyName
+        DecoyObjectId     = $decoyObjectId
+        DecoyType         = $decoyType
         ActorLabel        = $actorLabel
         ActorKey          = Get-TripwireActorKey -Touch $Touch
         Touch             = $Touch

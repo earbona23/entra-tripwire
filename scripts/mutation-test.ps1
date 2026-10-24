@@ -101,12 +101,90 @@ $mutants = @(
         Defect = 'A score exactly on the threshold falls out of the High band.'
     }
     @{ Name = 'fanout-counts-events'; File = 'src/EntraTripwire/Public/Invoke-TripwireAnalysis.ps1'
-        From = '| Sort-Object -Unique).Count'; To = ').Count'
+        From = '[void] $distinct.Add($sorted[$j].DecoyId)'; To = '[void] $distinct.Add("$($sorted[$j].DecoyId)-$j")'
         Defect = 'Fan-out counts events instead of distinct decoys: one decoy retried looks like a sweep.'
+    }
+    @{ Name = 'correlation-window-ignored'; File = 'src/EntraTripwire/Public/Invoke-TripwireAnalysis.ps1'
+        From = 'while (($hi + 1) -lt $sorted.Count -and ($sorted[$hi + 1].Ticks - $centre) -le $windowTicks) { $hi++ }'
+        To = 'while (($hi + 1) -lt $sorted.Count) { $hi++ }'
+        Defect = 'The correlation window stops bounding anything: every touch an actor ever made counts as fan-out.'
+    }
+    @{ Name = 'suppression-unplaceable-time'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '$plantedAt = if ($null -ne $Decoy) { ConvertTo-TripwireUtcOrNull $Decoy.plantedAt } else { $null }'
+        To = '$plantedAt = if ($null -ne $Decoy) { ConvertTo-TripwireUtc $Decoy.plantedAt } else { $null }'
+        Defect = 'A hand-edited plantedAt that is not a date raises a parse error from inside the suppression rule and abandons the run.'
+    }
+    @{ Name = 'collection-rejects-undated'; File = 'src/EntraTripwire/Private/ConvertTo-TripwireTouch.ps1'
+        From = 'timestamp = ConvertTo-TripwireUtcOrNull $Record.createdDateTime'
+        To = 'timestamp = ConvertTo-TripwireUtc $Record.createdDateTime'
+        Defect = 'One sign-in record without a createdDateTime raises a parse error and abandons the whole collection run.'
+    }
+    @{ Name = 'policy-integrity-off'; File = 'src/EntraTripwire/Public/Get-TripwirePolicy.ps1'
+        From = 'if ($Override) { Assert-TripwirePolicy -Policy $result }'; To = '$null = $Override'
+        Defect = 'An incomplete policy is accepted again: a missing High threshold bands every trip High, because 50 -ge $null is true.'
+    }
+    @{ Name = 'offhours-undated-scored'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = @'
+    $at = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+    if ($null -eq $at) {
+'@
+        To = @'
+    $at = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+    if ($false) {
+'@
+        Defect = 'A record with no timestamp is scored for off-hours anyway instead of withholding the signal.'
+    }
+    @{ Name = 'licence-empty-features'; File = 'src/EntraTripwire/Private/License.ps1'
+        From = "if (`$r.Payload.PSObject.Properties.Name -contains 'features') {"
+        To = "if (`$r.Payload.PSObject.Properties.Name -contains 'features' -and `$r.Payload.features) {"
+        Defect = 'A licence scoped to an empty feature list grants every Pro feature again.'
+    }
+    @{ Name = 'licence-payload-shape'; File = 'src/EntraTripwire/Private/License.ps1'
+        From = "    if (`$payload -isnot [pscustomobject] -or [string]::IsNullOrWhiteSpace([string]`$payload.sub)) {"
+        To = '    if ($false) {'
+        Defect = 'A signed payload that is not a licence object grants full Pro to no named licensee.'
+    }
+    @{ Name = 'containment-trusts-the-log'; File = 'src/EntraTripwire/Public/Invoke-TripwireContainment.ps1'
+        From = '            $decoyObjectId = [string]$Trip.DecoyObjectId'
+        To = '            $decoyObjectId = [string]$Trip.Touch.actor.id'
+        Defect = 'Containment disables the principal named in the log record instead of the decoy recorded in the local inventory.'
     }
     @{ Name = 'containment-band-gate'; File = 'src/EntraTripwire/Public/Invoke-TripwireContainment.ps1'
         From = "if (`$Trip.Band -ne 'High')"; To = "if (`$Trip.Band -eq 'High')"
         Defect = 'Containment refuses High trips and accepts everything else.'
+    }
+    @{ Name = 'lookback-window-unchecked'; File = 'src/EntraTripwire/Public/Watch-TripwireActivity.ps1'
+        From = '[ValidateRange(1, 365)] [int] $Days = 1'; To = '[int] $Days = 1'
+        Defect = 'A zero or negative lookback is accepted again, putting the Graph filter in the future and reporting a blind run as a quiet tenant.'
+    }
+    @{ Name = 'orphan-decoy-silent'; File = 'src/EntraTripwire/Public/New-TripwireDecoy.ps1'
+        From = "    if (-not `$RegisterOnly -and [string]::IsNullOrWhiteSpace([string]`$record['objectId'])) {"
+        To = '    if ($false) {'
+        Defect = 'A decoy planted without an object id is recorded as healthy, though it can neither be removed nor contained.'
+    }
+    @{ Name = 'purity-count-unchecked'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = "        if (-not [int]::TryParse([string]`$Decoy.legitimateUseCount, [ref] `$parsed)) {"
+        To = '        if ($false) {'
+        Defect = 'A hand-edited legitimateUseCount that is not a number crashes the dominant signal again.'
+    }
+    @{ Name = 'truncation-silent'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = @'
+Write-TripwireLog -Level 'Warn' -Message "Stopped after $MaxPages pages; results are TRUNCATED. Narrow the time window or raise -MaxPages."
+'@
+        To = '$null = $MaxPages'
+        Defect = 'A read that stopped at the page limit is reported as a complete one.'
+    }
+    @{ Name = 'read-failure-swallowed'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = @'
+throw "Graph GET failed for '$next': $($_.Exception.Message)"
+'@
+        To = 'return $results.ToArray()'
+        Defect = 'An exhausted read returns an empty set, so a failed log read is indistinguishable from a quiet tenant.'
+    }
+    @{ Name = 'retries-unretryable'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = 'if (($status -eq 429 -or $status -ge 500) -and $attempt -le $MaxRetry) {'
+        To = 'if ($attempt -le $MaxRetry) {'
+        Defect = 'A 403 from a missing permission is retried as if it were throttling, hiding a configuration error behind a delay.'
     }
     @{ Name = 'write-body-unchecked'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphWrite.ps1'
         From = 'if ([string]$Body[$k] -ne [string]$expected[$k]) { $mismatch = $true; break }'

@@ -4,6 +4,13 @@
     A TOUCH is an observed contact with a decoy. A TRIP is a touch that has been scored.
     Keeping the words apart keeps the pipeline honest: collection produces touches and
     cannot produce a verdict, scoring produces trips and cannot produce evidence.
+
+    Timestamps are resolved with ConvertTo-TripwireUtcOrNull rather than the throwing
+    variant. A record Graph returned without a usable date is still a contact with a decoy
+    and is still worth reporting; what it is not worth is abandoning every other record in
+    the batch, which is what a terminating parse error here used to do. A touch with a
+    $null timestamp is never correlated and the signals that need a clock withhold
+    themselves, so it arrives in front of the operator marked degraded instead of absent.
 #>
 
 <#
@@ -63,7 +70,7 @@ function ConvertTo-TripwireTouchFromSignIn {
 
     [pscustomobject]@{
         id        = [string]$Record.id
-        timestamp = ConvertTo-TripwireUtc $Record.createdDateTime
+        timestamp = ConvertTo-TripwireUtcOrNull $Record.createdDateTime
         decoyId   = [string]$decoy.id
         source    = 'SignInLog'
         operation = "Sign-in to $($Record.appDisplayName)"
@@ -126,7 +133,7 @@ function ConvertTo-TripwireTouchFromAudit {
 
     [pscustomobject]@{
         id        = [string]$Record.id
-        timestamp = ConvertTo-TripwireUtc $Record.activityDateTime
+        timestamp = ConvertTo-TripwireUtcOrNull $Record.activityDateTime
         decoyId   = [string]$decoy.id
         source    = 'DirectoryAudit'
         operation = [string]$Record.activityDisplayName

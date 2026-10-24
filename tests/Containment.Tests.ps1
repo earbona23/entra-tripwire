@@ -35,7 +35,10 @@ BeforeAll {
         $baseline = if ($Degraded) { $null } else { New-TestBaseline }
         $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' `
             -ActorId 'u-decoy-1' -ActorUpn 'svc-bait@contoso.com'
-        Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy) -Baseline $baseline -DistinctDecoyCount 4
+        # The decoy's inventory object id matches the principal in the sign-in record,
+        # which is what real data looks like: Demo/decoys.json records u-decoy-1 and
+        # Demo/signins.json is a sign-in BY u-decoy-1. Containment refuses when they differ.
+        Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy -ObjectId 'u-decoy-1') -Baseline $baseline -DistinctDecoyCount 4
     }
 }
 
@@ -211,6 +214,53 @@ Describe 'What containment actually does when every gate is open' {
         @(Get-GraphStubCall -Module $script:Module).Count | Should -Be 0
         (Get-ChildItem -Path $capture -Filter '*.json').Count | Should -Be 1
         Remove-Item -LiteralPath $capture -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # The object to disable is taken from the LOCAL INVENTORY, never from the log record.
+    # Before this, the PATCH target was $Trip.Touch.actor.id -- a field of a log record,
+    # and log records are shaped by the actor they describe. The decoy index matches on
+    # four identifiers (object id, app id, UPN, display name), so a record can match a
+    # decoy while naming a different principal, and the module would then have disabled
+    # that principal under the label 'DisableDecoy'.
+    It 'refuses to disable anything when the log and the inventory name different objects' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' `
+            -ActorId 'someone-else' -ActorUpn 'svc-bait@contoso.com'
+        $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy -ObjectId 'u-decoy-1') `
+            -Baseline (New-TestBaseline) -DistinctDecoyCount 4
+        $trip.Band | Should -Be 'High'
+
+        $capture = Join-Path ([System.IO.Path]::GetTempPath()) ("inc-{0}" -f [Guid]::NewGuid())
+        $result = $trip | Invoke-TripwireContainment -Execute -CapturePath $capture -Confirm:$false
+        $disable = $result.Plan | Where-Object Name -eq 'DisableDecoy'
+        $disable.Eligible | Should -BeFalse
+        $disable.Why | Should -Match 'disagree'
+        @(Get-GraphStubCall -Module $script:Module | Where-Object Method -eq 'PATCH').Count | Should -Be 0
+        Remove-Item -LiteralPath $capture -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'refuses to disable a decoy the inventory has no object id for' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -ActorId 'u-decoy-1'
+        $trip = Measure-TripwireConfidence -Touch $touch -Decoy (New-TestDecoy -ObjectId '') `
+            -Baseline (New-TestBaseline) -DistinctDecoyCount 4
+        $disable = ($trip | Invoke-TripwireContainment).Plan | Where-Object Name -eq 'DisableDecoy'
+        $disable.Eligible | Should -BeFalse
+        $disable.Why | Should -Match 'no object id in the local inventory'
+    }
+
+    # A decoy application is signed in to by its SERVICE PRINCIPAL, whose object id is not
+    # the application object id the inventory holds. PATCHing /v1.0/users/<application id>
+    # addresses the wrong object entirely.
+    It 'refuses to disable a decoy that is not a user' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:MintPro
+        $touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512' -ActorId 'a-decoy-1'
+        $trip = Measure-TripwireConfidence -Touch $touch `
+            -Decoy (New-TestDecoy -Type 'Application' -ObjectId 'a-decoy-1') `
+            -Baseline (New-TestBaseline) -DistinctDecoyCount 4
+        $disable = ($trip | Invoke-TripwireContainment).Plan | Where-Object Name -eq 'DisableDecoy'
+        $disable.Eligible | Should -BeFalse
+        $disable.Why | Should -Match 'service principal'
     }
 
     It 'reports a failed action as Failed rather than folding it into a success' {

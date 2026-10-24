@@ -154,3 +154,102 @@ Describe 'Feature gating' {
         Remove-Item -LiteralPath $out -ErrorAction SilentlyContinue
     }
 }
+
+<#
+    The gate's behaviour on its own error paths.
+
+    A licence gate that throws, or that reads a missing field as "unspecified, so grant
+    everything", is a gate that fails in the expensive direction. Every case below was
+    measured against the module before these guards existed.
+#>
+Describe 'The gate fails closed on a malformed licence' {
+
+    BeforeEach {
+        $script:RealPub = & $script:Module { $script:LicensePublicKeySpki }
+        . $script:Module { param($p) $script:LicensePublicKeySpki = $p } $script:PubSpki
+        Remove-Item Env:\ENTRATRIPWIRE_LICENSE_KEY -ErrorAction SilentlyContinue
+    }
+
+    AfterEach {
+        . $script:Module { param($p) $script:LicensePublicKeySpki = $p } $script:RealPub
+        Remove-Item Env:\ENTRATRIPWIRE_LICENSE_KEY -ErrorAction SilentlyContinue
+    }
+
+    # [int64]'tomorrow' throws. Get-TripwireLicense raised that conversion error at the
+    # caller, and so did Invoke-TripwireContainment, which consults the gate through
+    # Test-TripwireFeature -- an unhandled crash in the middle of an incident instead of
+    # an answer about licensing.
+    It 'reports an unreadable expiry instead of throwing a conversion error' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:Mint @{ sub = 'Acme'; plan = 'pro'; exp = 'tomorrow' }
+        { Get-TripwireLicense | Out-Null } | Should -Not -Throw
+        $licence = Get-TripwireLicense
+        $licence.Pro | Should -BeFalse
+        $licence.Reason | Should -Match 'not a whole number of epoch seconds'
+    }
+
+    # @() is falsy in PowerShell, so `-and $payload.features` read an explicitly empty
+    # feature list as "the field was not set" and handed over all three Pro features.
+    It 'treats a licence scoped to no features as entitling nothing, not everything' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:Mint @{ sub = 'Acme'; plan = 'pro'; features = @() }
+        $licence = Get-TripwireLicense
+        @($licence.Features).Count | Should -Be 0
+        (& $script:Module { Test-TripwireFeature -Feature 'containment' }) | Should -BeFalse
+    }
+
+    It 'honours a licence scoped to one feature and refuses the others' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:Mint @{ sub = 'Acme'; plan = 'pro'; features = @('soar') }
+        (& $script:Module { Test-TripwireFeature -Feature 'soar' }) | Should -BeTrue
+        (& $script:Module { Test-TripwireFeature -Feature 'containment' }) | Should -BeFalse
+        (& $script:Module { Test-TripwireFeature -Feature 'multitenant' }) | Should -BeFalse
+    }
+
+    # The signature proves who minted the key. It proves nothing about the key carrying
+    # the fields an entitlement is read from: a signed JSON array granted full Pro to a
+    # licensee with no name.
+    It 'refuses a signed payload that is not a licence object' {
+        $json = '[1,2,3]'
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $sig = $script:Ecdsa.SignData($bytes,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.DSASignatureFormat]::Rfc3279DerSequence)
+        function b64u([byte[]] $b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
+        $env:ENTRATRIPWIRE_LICENSE_KEY = "TRIPWIRE-$(b64u $bytes).$(b64u $sig)"
+
+        $licence = Get-TripwireLicense
+        $licence.Pro | Should -BeFalse
+        $licence.Reason | Should -Match 'not a licence object'
+    }
+
+    It 'refuses a signed payload with no subject' {
+        $env:ENTRATRIPWIRE_LICENSE_KEY = script:Mint @{ plan = 'pro'; iat = 1 }
+        (Get-TripwireLicense).Pro | Should -BeFalse
+    }
+
+    It 'names an unreadable licence file instead of reporting "no licence activated"' {
+        # Get-TripwireStatePath appends an 'EntraTripwire' folder to the config dir.
+        $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("etw-{0}" -f [Guid]::NewGuid())
+        New-Item -ItemType Directory -Path (Join-Path $dir 'EntraTripwire') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'EntraTripwire/license.json') -Value '{ this is not json' -Encoding utf8
+        $previous = $env:ENTRATRIPWIRE_CONFIG_DIR
+        $env:ENTRATRIPWIRE_CONFIG_DIR = $dir
+        try {
+            $licence = Get-TripwireLicense
+            $licence.Pro | Should -BeFalse
+            $licence.Reason | Should -Match 'could not be read'
+        }
+        finally {
+            $env:ENTRATRIPWIRE_CONFIG_DIR = $previous
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # Not a hypothetical: the module resolves its own private commands inside its own
+    # session state, so a same-named function defined by the caller is not consulted.
+    # Pinned because it is a property of how the module is loaded, and a future refactor
+    # that exported the gate, or moved it to a dot-sourced script, would lose it.
+    It 'is not satisfied by a same-named function defined in the caller scope' {
+        function Test-TripwireFeature { param($Feature) $true }
+        $trip = Measure-TripwireConfidence -Touch (New-TestTouch) -Decoy (New-TestDecoy) -Baseline (New-TestBaseline)
+        ($trip | Invoke-TripwireContainment).Licensed | Should -BeFalse
+    }
+}

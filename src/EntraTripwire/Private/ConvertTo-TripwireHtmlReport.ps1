@@ -40,6 +40,11 @@ function ConvertTo-TripwireHtmlReport {
 
     $rows = foreach ($t in $ordered) {
         $withheld = if (@($t.Withheld).Count -gt 0) { 'withheld: ' + (@($t.Withheld) -join ', ') } else { 'all signals evaluated' }
+        # A touch can reach the report with no resolvable timestamp -- Graph omits
+        # properties rather than nulling them, and such a touch is scored with the signals
+        # that need a clock withheld rather than being dropped. Calling .ToString() on it
+        # throws, and the whole report with it, so the absence is rendered as an absence.
+        $when = if ($null -ne $t.Touch.timestamp) { $t.Touch.timestamp.ToString('u') } else { 'no timestamp in the source record' }
         $signalHtml = foreach ($s in $t.Signals) {
             $state = if ($s.Available) { "$([Math]::Round($s.Raw * 100))%" } else { 'n/a' }
             "<li><b>$(ConvertTo-TripwireHtmlEncoded $s.Name)</b> <span class=""w"">x$($s.Weight)</span> <span class=""r"">$state</span><br><span class=""why"">$(ConvertTo-TripwireHtmlEncoded $s.Rationale)</span></li>"
@@ -49,7 +54,7 @@ function ConvertTo-TripwireHtmlReport {
   <td class="score"><span class="pill">$([int]$t.Confidence)</span><br><span class="band">$(ConvertTo-TripwireHtmlEncoded $t.Band)</span></td>
   <td>
     <div class="hdr">$(ConvertTo-TripwireHtmlEncoded $t.DecoyName) <span class="mono">$(ConvertTo-TripwireHtmlEncoded $t.Touch.operation)</span></div>
-    <div class="meta">$(ConvertTo-TripwireHtmlEncoded $t.Touch.timestamp.ToString('u')) &middot; actor $(ConvertTo-TripwireHtmlEncoded $t.ActorLabel) &middot; $(ConvertTo-TripwireHtmlEncoded $t.Touch.ip) $(ConvertTo-TripwireHtmlEncoded $t.Touch.country) &middot; $(ConvertTo-TripwireHtmlEncoded $t.Touch.source)</div>
+    <div class="meta">$(ConvertTo-TripwireHtmlEncoded $when) &middot; actor $(ConvertTo-TripwireHtmlEncoded $t.ActorLabel) &middot; $(ConvertTo-TripwireHtmlEncoded $t.Touch.ip) $(ConvertTo-TripwireHtmlEncoded $t.Touch.country) &middot; $(ConvertTo-TripwireHtmlEncoded $t.Touch.source)</div>
     <div class="cov">$(ConvertTo-TripwireHtmlEncoded $withheld)</div>
     $(if ($t.SuppressionReason) { "<div class=""sup"">Suppressed: $(ConvertTo-TripwireHtmlEncoded $t.SuppressionReason)</div>" })
     <ul class="signals">$($signalHtml -join '')</ul>

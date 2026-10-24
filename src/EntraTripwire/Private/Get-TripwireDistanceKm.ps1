@@ -35,6 +35,12 @@ function Get-TripwireDistanceKm {
          [Math]::Cos([double]$Lat1 * $toRad) * [Math]::Cos([double]$Lat2 * $toRad) *
          [Math]::Sin($dLon / 2) * [Math]::Sin($dLon / 2)
 
+    # Floating point can push $a a hair above 1 for near-antipodal pairs, and Sqrt of a
+    # negative is NaN. NaN compares false against every threshold, so an impossible-travel
+    # verdict would be silently withheld for the longest journeys -- the ones it exists for.
+    if ($a -lt 0) { $a = 0.0 }
+    if ($a -gt 1) { $a = 1.0 }
+
     $c = 2 * [Math]::Atan2([Math]::Sqrt($a), [Math]::Sqrt(1 - $a))
     return [Math]::Round($earthRadiusKm * $c, 3)
 }

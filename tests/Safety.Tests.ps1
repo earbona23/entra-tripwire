@@ -198,4 +198,30 @@ Describe 'Blind runs announce themselves' {
         { Get-TripwireDecoy -Path $bad } | Should -Throw -ExpectedMessage '*not valid JSON*'
         Remove-Item -LiteralPath $bad -ErrorAction SilentlyContinue
     }
+    # A time window that cannot contain anything is a blind run that reports zero touches.
+    # The Graph $filter would be set in the future and the query would succeed, empty.
+    It 'will not accept a lookback window that puts the query in the future' {
+        { Watch-TripwireActivity -Days 0 } | Should -Throw -ExpectedMessage '*minimum allowed range of 1*'
+        { Watch-TripwireActivity -Days -7 } | Should -Throw
+        { Get-TripwireBaseline -Build -Days 0 } | Should -Throw
+    }
+
+    # A decoy with no object id cannot be deleted by Remove-TripwireDecoy and cannot be
+    # disabled by Invoke-TripwireContainment, so it is an orphan with a planted credential.
+    # The record is still kept -- the object may exist -- but the operator is told.
+    It 'warns when a planted decoy comes back without an object id' {
+        . $script:Module { function Invoke-MgGraphRequest { param($Method, $Uri, $Body, $OutputType, $ErrorAction) return [pscustomobject]@{ nothing = 'useful' } } }
+        try {
+            $inventory = Join-Path ([System.IO.Path]::GetTempPath()) ("inv-{0}.json" -f [Guid]::NewGuid())
+            $warnings = @()
+            New-TripwireDecoy -Type User -DisplayName 'svc-bait' -UserPrincipalName 'svc-bait@contoso.com' `
+                -Path $inventory -Confirm:$false -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+            ($warnings -join ' ') | Should -Match 'cannot be removed or contained by id'
+            @(Get-TripwireDecoy -Path $inventory).Count | Should -Be 1
+            Remove-Item -LiteralPath $inventory -ErrorAction SilentlyContinue
+        }
+        finally {
+            Install-GraphStub -Module $script:Module
+        }
+    }
 }

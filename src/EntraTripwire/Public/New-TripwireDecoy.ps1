@@ -130,6 +130,14 @@ function New-TripwireDecoy {
         }
     }
 
+    if (-not $RegisterOnly -and [string]::IsNullOrWhiteSpace([string]$record['objectId'])) {
+        # The object may well exist in the tenant -- the write was issued -- so the record
+        # is still written rather than discarded. What must not happen is for this to look
+        # like a healthy plant: without an object id, Remove-TripwireDecoy cannot delete
+        # the object and Invoke-TripwireContainment cannot disable it.
+        Write-TripwireLog -Level 'Warn' -Message "Graph did not return an object id for '$DisplayName'. The decoy is recorded, but it cannot be removed or contained by id -- find the object in the tenant and re-register it with New-TripwireDecoy -RegisterOnly -ObjectId."
+    }
+
     $existing = @(Get-TripwireDecoy -Path $Path)
     $all = @($existing) + @([pscustomobject]$record)
     @{ version = 1; decoys = $all } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding utf8

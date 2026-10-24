@@ -16,6 +16,13 @@
     manufacture fan-out out of unrelated noise, and fan-out is what carries a trip into the
     band where containment becomes eligible.
 
+    A touch whose timestamp cannot be resolved is in the same position: it cannot be placed
+    in any window, so it is scored alone at fan-out 1 and the signals that need a clock
+    withhold themselves. It is NOT dropped and it does not stop the batch. Before this was
+    explicit, one record with no createdDateTime raised a terminating error here and took
+    every other scored trip in the run with it -- a run that found intrusions returned
+    nothing, and nothing is exactly what a quiet tenant returns.
+
 .PARAMETER Touch
     Normalised touches from Watch-TripwireActivity.
 
@@ -42,38 +49,58 @@ function Invoke-TripwireAnalysis {
         $Policy
     )
 
-    if (-not $Policy) { $Policy = Get-TripwirePolicy }
+    $Policy = Resolve-TripwirePolicy -Policy $Policy
 
     $decoyById = @{}
     foreach ($d in $Decoy) { $decoyById[[string]$d.id] = $d }
 
-    $window = [TimeSpan]::FromMinutes($Policy.CorrelationWindowMinutes)
+    $windowTicks = [TimeSpan]::FromMinutes($Policy.CorrelationWindowMinutes).Ticks
 
-    # Group by actor once; anonymous touches get a unique key each so they group alone.
+    # One pass to resolve each touch's identity and its time. Both were previously
+    # recomputed inside the inner loop, which made the parse cost quadratic: 2,000 touches
+    # over 20 actors took 10.3 s, almost all of it re-parsing the same timestamps.
+    $entries = [System.Collections.Generic.List[object]]::new()
     $byActor = @{}
-    $anonymous = 0
     foreach ($t in $Touch) {
         $key = Get-TripwireActorKey -Touch $t
-        if ($null -eq $key) {
-            $anonymous++
-            $key = "anon:$anonymous"
+        $when = ConvertTo-TripwireUtcOrNull $t.timestamp
+        $entry = [pscustomobject]@{
+            Touch   = $t
+            Ticks   = if ($null -ne $when) { $when.Ticks } else { $null }
+            DecoyId = [string]$t.decoyId
+            Count   = 1
         }
-        if (-not $byActor.ContainsKey($key)) { $byActor[$key] = [System.Collections.Generic.List[object]]::new() }
-        $byActor[$key].Add($t)
+        $entries.Add($entry)
+
+        # Correlation needs BOTH an identifiable actor and a placeable time. Missing
+        # either, the touch is scored alone rather than folded into somebody else's window.
+        if ($null -ne $key -and $null -ne $when) {
+            if (-not $byActor.ContainsKey($key)) { $byActor[$key] = [System.Collections.Generic.List[object]]::new() }
+            $byActor[$key].Add($entry)
+        }
     }
 
-    foreach ($t in $Touch) {
-        $key = Get-TripwireActorKey -Touch $t
-        $distinct = 1
-        if ($null -ne $key -and $byActor.ContainsKey($key)) {
-            $near = @($byActor[$key] | Where-Object {
-                    [Math]::Abs(((ConvertTo-TripwireUtc $_.timestamp) - (ConvertTo-TripwireUtc $t.timestamp)).TotalMinutes) -le $window.TotalMinutes
-                })
-            $distinct = @($near | ForEach-Object { [string]$_.decoyId } | Sort-Object -Unique).Count
-            if ($distinct -lt 1) { $distinct = 1 }
-        }
+    # Per actor: sort once, then sweep the window with two pointers. The distinct count is
+    # over decoy IDS, never events -- an attacker retrying one decoy fifty times must not
+    # look like a sweep across fifty decoys.
+    foreach ($bucket in $byActor.Values) {
+        $sorted = @($bucket | Sort-Object -Property Ticks)
+        $lo = 0
+        $hi = -1
+        for ($i = 0; $i -lt $sorted.Count; $i++) {
+            $centre = $sorted[$i].Ticks
+            while ($lo -lt $sorted.Count -and ($centre - $sorted[$lo].Ticks) -gt $windowTicks) { $lo++ }
+            if ($hi -lt $i) { $hi = $i }
+            while (($hi + 1) -lt $sorted.Count -and ($sorted[$hi + 1].Ticks - $centre) -le $windowTicks) { $hi++ }
 
-        Measure-TripwireConfidence -Touch $t -Decoy $decoyById[[string]$t.decoyId] `
-            -Baseline $Baseline -DistinctDecoyCount $distinct -Policy $Policy
+            $distinct = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            for ($j = $lo; $j -le $hi; $j++) { [void] $distinct.Add($sorted[$j].DecoyId) }
+            $sorted[$i].Count = [Math]::Max(1, $distinct.Count)
+        }
+    }
+
+    foreach ($entry in $entries) {
+        Measure-TripwireConfidence -Touch $entry.Touch -Decoy $decoyById[$entry.DecoyId] `
+            -Baseline $Baseline -DistinctDecoyCount $entry.Count -Policy $Policy
     }
 }
