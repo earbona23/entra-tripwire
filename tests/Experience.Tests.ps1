@@ -71,8 +71,12 @@ Describe 'The guided run, against the fixtures' {
     It 'carries the same verdict the report carries' {
         $script:Run.Summary.High | Should -Be 1
         $script:Run.Summary.Total | Should -Be 9
+        # Compared against the encoded form: the report escapes everything it renders, so
+        # the day a verdict gains an apostrophe this test must still be comparing the same
+        # sentence rather than failing on &#39;.
         $html = Get-Content -LiteralPath $script:ReportPath -Raw
-        $html | Should -BeLike "*$($script:Run.Summary.Verdict)*"
+        $encoded = [System.Net.WebUtility]::HtmlEncode($script:Run.Summary.Verdict)
+        $html | Should -BeLike "*$encoded*"
     }
 
     It 'narrates every step on the information stream, where it can be captured or silenced' {
