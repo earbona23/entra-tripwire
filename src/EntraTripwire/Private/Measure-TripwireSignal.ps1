@@ -10,6 +10,111 @@
 
 <#
 .SYNOPSIS
+    A number out of a hand-maintained file, or $null if it is not one.
+
+.DESCRIPTION
+    Baselines and decoy records are JSON files an operator is told to edit: the suppression
+    allowlist, legitimateUseCount, a corrected sign-in total. So every number the engine
+    reads out of them can arrive as a word, and the casts that read them -- [int], [double],
+    and the [double] parameter binding in Get-TripwireDistanceKm -- all THROW on one.
+
+    They throw inside a signal, which is the worst place for it. Scoring runs per touch
+    inside Invoke-TripwireAnalysis, so one bad character in one baseline field aborted the
+    whole batch: a run that found intrusions returned nothing, and nothing is what a quiet
+    tenant returns. Reading through here turns that into a withheld signal on a trip the
+    operator can still see.
+
+    Test-TripwireNumber does the deciding (it lives with Assert-TripwirePolicy, which has
+    to answer the same question about a policy), so "is this a number" cannot come to two
+    different answers in two places. [double] rather than [int] on the way out: [int] on a
+    count larger than 2^31 throws too, which is the same class of defect one cast along.
+#>
+function ConvertTo-TripwireNumberOrNull {
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([AllowNull()] $Value)
+
+    if (-not (Test-TripwireNumber $Value)) { return $null }
+    return [double]$Value
+}
+
+<#
+.SYNOPSIS
+    Is the tenant baseline still a description of this tenant?
+
+.DESCRIPTION
+    Get-TripwireBaseline has always stamped generatedAt into the file, and until now
+    nothing read it. A baseline from six months ago was used in silence, which means
+    "unusual country" and "outside working hours" were scored against a tenant that had
+    since hired, moved, changed its egress and retired an office. Both of those signals
+    are only as meaningful as the history behind them.
+
+    Age is measured against the TOUCH being scored rather than against the clock. That is
+    not a convenience: re-analysing last month's logs should compare them with the baseline
+    that was current for them, and a baseline built after the event is not stale at all --
+    its history covers the period the touch came from. Only a touch with no usable time
+    falls back to the clock, since there is nothing else to anchor it to.
+
+    Two limits, both policy: a warning age and a stale age. Past the stale age the caller
+    WITHHOLDS. Withholding is a real cost -- it lowers the score and marks the trip
+    degraded -- and that is the correct direction: a signal computed against an obsolete
+    baseline is not weaker evidence, it is evidence about a different tenant.
+
+    Returns Known = $false when the age cannot be established, and Stale = $true with it.
+    An age nobody can establish is not freshness. This is the same rule the purity signal
+    applies to an unreadable legitimateUseCount, and the reason it has to be written down
+    is that PowerShell answers it the other way for free: `145 -gt $null` is $true, so a
+    missing limit would decide this by accident, in whichever direction the comparison
+    happened to be typed.
+#>
+function Test-TripwireBaselineFreshness {
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [AllowNull()] $Baseline,
+        [AllowNull()] $AsOf,
+        [Parameter(Mandatory)] $Policy
+    )
+
+    $verdict = {
+        param($known, $stale, $warn, $age, $reason)
+        [pscustomobject]@{ Known = $known; Stale = $stale; Warn = $warn; AgeDays = $age; Reason = $reason }
+    }
+
+    # No baseline at all is a different answer from a stale one, and the callers already
+    # withhold for it with a message that tells the operator to build one.
+    if ($null -eq $Baseline) { return & $verdict $false $false $false $null 'there is no baseline.' }
+
+    $warnAge = ConvertTo-TripwireNumberOrNull $Policy.BaselineWarnAgeDays
+    $staleAge = ConvertTo-TripwireNumberOrNull $Policy.BaselineStaleAgeDays
+    if ($null -eq $warnAge -or $null -eq $staleAge) {
+        return & $verdict $false $true $true $null (
+            'the policy carries no usable BaselineWarnAgeDays or BaselineStaleAgeDays, so the age of the baseline cannot be judged at all. Start from Get-TripwirePolicy and override what you need.')
+    }
+
+    $generatedAt = ConvertTo-TripwireUtcOrNull $Baseline.generatedAt
+    if ($null -eq $generatedAt) {
+        return & $verdict $false $true $true $null (
+            "the baseline records generatedAt as '$($Baseline.generatedAt)', so how old it is cannot be established. Rebuild it with Get-TripwireBaseline -Build -Save.")
+    }
+
+    $reference = ConvertTo-TripwireUtcOrNull $AsOf
+    if ($null -eq $reference) { $reference = [DateTime]::UtcNow }
+
+    $age = ($reference - $generatedAt).TotalDays
+    if ($age -lt 0) { $age = 0.0 }
+
+    $stale = ($age -gt $staleAge)
+    $reason = if ($stale) {
+        'the baseline was generated {0:N1} day(s) earlier, past the {1}-day limit, so it describes a tenant this touch can no longer be compared with. Rebuild it with Get-TripwireBaseline -Build -Save.' -f $age, $staleAge
+    }
+    else { '' }
+
+    return & $verdict $true $stale ($age -ge $warnAge) $age $reason
+}
+
+<#
+.SYNOPSIS
     Signal (a): has this decoy ever been used legitimately?
 
 .DESCRIPTION
@@ -99,21 +204,47 @@ function Measure-TripwireOriginSignal {
 
     $weight = $Policy.Weights.OriginAnomaly
 
-    $total = if ($null -ne $Baseline) { $Baseline.totalSignIns } else { $null }
-    if ($null -eq $Baseline -or $null -eq $total -or [int]$total -le 0) {
+    # totalSignIns is a number in a file an operator edits, so it can arrive as a word.
+    # Unreadable is its own answer: it is not a total of zero and it is not a missing
+    # baseline, and [int] on it threw from inside this signal on every touch.
+    $declaredTotal = if ($null -ne $Baseline) { $Baseline.totalSignIns } else { $null }
+    $total = ConvertTo-TripwireNumberOrNull $declaredTotal
+    if ($null -ne $Baseline -and $null -ne $declaredTotal -and $null -eq $total) {
+        return New-TripwireSignal -Name 'OriginAnomaly' -Weight $weight -Available $false -Rationale (
+            "The baseline records totalSignIns as '$declaredTotal', which is not a number, so no origin can be measured as a share of it. Rebuild the baseline.")
+    }
+
+    if ($null -eq $Baseline -or $null -eq $total -or $total -le 0) {
         return New-TripwireSignal -Name 'OriginAnomaly' -Weight $weight -Available $false `
             -Rationale 'No tenant baseline of sign-in origins, so "unusual origin" has no meaning yet. Run Get-TripwireBaseline first.'
     }
-    $total = [int]$total
+
+    # Both times must resolve. Subtracting a DateTime from $null throws, which would
+    # abandon the whole batch over one record that merely lacks a usable timestamp.
+    $touchAt = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+
+    # An origin is only unusual relative to a history, and a history has a shelf life.
+    # Scoring against an expired one is not weaker evidence: it is evidence about the
+    # tenant as it was, which is why this withholds rather than discounts.
+    $freshness = Test-TripwireBaselineFreshness -Baseline $Baseline -AsOf $touchAt -Policy $Policy
+    if ($freshness.Stale) {
+        return New-TripwireSignal -Name 'OriginAnomaly' -Weight $weight -Available $false -Rationale (
+            'The origin cannot be compared with this tenant: {0}' -f $freshness.Reason)
+    }
 
     # 1. Impossible travel against the actor's last known position.
     $lastSeen = Get-TripwireMapValue -Map $Baseline.actorLastSeen -Key ([string]$Touch.actor.id)
-    if ($null -ne $lastSeen -and $null -ne $Touch.latitude -and $null -ne $lastSeen.latitude) {
-        $km = Get-TripwireDistanceKm -Lat1 $lastSeen.latitude -Lon1 $lastSeen.longitude `
-            -Lat2 $Touch.latitude -Lon2 $Touch.longitude
-        # Both times must resolve. Subtracting a DateTime from $null throws, which would
-        # abandon the whole batch over one record that merely lacks a usable timestamp.
-        $touchAt = ConvertTo-TripwireUtcOrNull $Touch.timestamp
+    if ($null -ne $lastSeen) {
+        # Coordinates come from JSON and from the same hand-editable baseline, and
+        # Get-TripwireDistanceKm binds them to [double]: a latitude recorded as 'north'
+        # throws on PARAMETER BINDING, before any guard inside that function can run.
+        # Resolved to numbers or $null first, and $null there withholds the component --
+        # "no location" must never read as "same city".
+        $km = Get-TripwireDistanceKm `
+            -Lat1 (ConvertTo-TripwireNumberOrNull $lastSeen.latitude) `
+            -Lon1 (ConvertTo-TripwireNumberOrNull $lastSeen.longitude) `
+            -Lat2 (ConvertTo-TripwireNumberOrNull $Touch.latitude) `
+            -Lon2 (ConvertTo-TripwireNumberOrNull $Touch.longitude)
         $seenAt = ConvertTo-TripwireUtcOrNull $lastSeen.timestamp
         $hours = if ($null -ne $touchAt -and $null -ne $seenAt) { ($touchAt - $seenAt).TotalHours } else { 0 }
         if ($null -ne $km -and $hours -gt 0) {
@@ -138,35 +269,58 @@ function Measure-TripwireOriginSignal {
     $best = 0.0
     $reason = "Origin $($Touch.country)/AS$($Touch.asn) is normal for this tenant."
 
+    # A baseline entry that is PRESENT but unreadable is not the same as an absent one.
+    # Absent means the tenant has never been seen here, which scores the full anomaly;
+    # claiming that from a corrupt record manufactures evidence. Collected here and
+    # answered at the bottom.
+    $unreadable = [System.Collections.Generic.List[string]]::new()
+
     # 2. Country.
     $country = [string]$Touch.country
     if ($hasCountry) {
-        $seen = Get-TripwireMapValue -Map $Baseline.countries -Key $country
-        if ($null -eq $seen -or [int]$seen -le 0) {
+        $declared = Get-TripwireMapValue -Map $Baseline.countries -Key $country
+        $seen = ConvertTo-TripwireNumberOrNull $declared
+        if ($null -ne $declared -and $null -eq $seen) {
+            $unreadable.Add("the baseline count for country '$country' is '$declared', which is not a number")
+        }
+        elseif ($null -eq $seen -or $seen -le 0) {
             $best = $Policy.OriginRaw.UnseenCountry
             $reason = "Country '$country' has never appeared in $total baseline sign-ins."
         }
-        elseif (([double]$seen / $total) -lt $Policy.RareCountryShare) {
+        elseif (($seen / $total) -lt $Policy.RareCountryShare) {
             $best = $Policy.OriginRaw.RareCountry
-            $reason = ('Country ''{0}'' accounts for {1:P2} of baseline sign-ins.' -f $country, ([double]$seen / $total))
+            $reason = ('Country ''{0}'' accounts for {1:P2} of baseline sign-ins.' -f $country, ($seen / $total))
         }
     }
 
     # 3. Autonomous system.
     $asn = [string]$Touch.asn
     if ($hasAsn) {
-        $seenAsn = Get-TripwireMapValue -Map $Baseline.asns -Key $asn
+        $declaredAsn = Get-TripwireMapValue -Map $Baseline.asns -Key $asn
+        $seenAsn = ConvertTo-TripwireNumberOrNull $declaredAsn
         $asnRaw = 0.0
         $asnReason = $null
-        if ($null -eq $seenAsn -or [int]$seenAsn -le 0) {
+        if ($null -ne $declaredAsn -and $null -eq $seenAsn) {
+            $unreadable.Add("the baseline count for AS$asn is '$declaredAsn', which is not a number")
+        }
+        elseif ($null -eq $seenAsn -or $seenAsn -le 0) {
             $asnRaw = $Policy.OriginRaw.UnseenAsn
             $asnReason = "AS$asn has never appeared in $total baseline sign-ins."
         }
-        elseif (([double]$seenAsn / $total) -lt $Policy.RareAsnShare) {
+        elseif (($seenAsn / $total) -lt $Policy.RareAsnShare) {
             $asnRaw = $Policy.OriginRaw.RareAsn
-            $asnReason = ('AS{0} accounts for {1:P2} of baseline sign-ins.' -f $asn, ([double]$seenAsn / $total))
+            $asnReason = ('AS{0} accounts for {1:P2} of baseline sign-ins.' -f $asn, ($seenAsn / $total))
         }
         if ($asnRaw -gt $best) { $best = $asnRaw; $reason = $asnReason }
+    }
+
+    # Never report a normal origin on the strength of a comparison that could not be made.
+    # A positive finding stands on its own -- the score is a floor and more evidence could
+    # only raise it -- but a zero resting on an unreadable baseline entry is the sentence
+    # an operator acts on by closing the alert.
+    if ($best -le 0 -and $unreadable.Count -gt 0) {
+        return New-TripwireSignal -Name 'OriginAnomaly' -Weight $weight -Available $false -Rationale (
+            'The origin cannot be compared with the tenant baseline: {0}. Rebuild the baseline.' -f (@($unreadable) -join '; '))
     }
 
     return New-TripwireSignal -Name 'OriginAnomaly' -Weight $weight -Raw $best -Rationale $reason
@@ -240,7 +394,20 @@ function Measure-TripwireOffHoursSignal {
             -Rationale 'No 24-hour baseline histogram, so this hour cannot be compared with the tenant norm.'
     }
 
-    $values = @($hist | ForEach-Object { [double]$_ })
+    # Hand-editable JSON again, and [double]'noon' throws -- here, for every touch in the
+    # batch. One bucket that is not a number also makes the peak wrong, and the peak is the
+    # denominator of every hour's density, so the whole histogram is withheld rather than
+    # 23 hours of it being scored against a corrupt maximum.
+    $values = [System.Collections.Generic.List[double]]::new()
+    foreach ($bucket in @($hist)) {
+        $parsed = ConvertTo-TripwireNumberOrNull $bucket
+        if ($null -eq $parsed) {
+            return New-TripwireSignal -Name 'OffHours' -Weight $weight -Available $false -Rationale (
+                "The baseline hour histogram holds '$bucket', which is not a number, so no hour can be compared with the tenant norm. Rebuild the baseline.")
+        }
+        $values.Add($parsed)
+    }
+
     $peak = ($values | Measure-Object -Maximum).Maximum
     if ($peak -le 0) {
         return New-TripwireSignal -Name 'OffHours' -Weight $weight -Available $false `
@@ -255,6 +422,15 @@ function Measure-TripwireOffHoursSignal {
     if ($null -eq $at) {
         return New-TripwireSignal -Name 'OffHours' -Weight $weight -Available $false `
             -Rationale 'This record carries no usable timestamp, so the hour it happened in cannot be compared with the tenant norm.'
+    }
+
+    # "Off hours for this tenant" is a claim about a tenant that was measured at some
+    # point. Past the policy's stale age the histogram describes the working pattern of a
+    # tenant that has since changed shift, so it is withheld rather than believed.
+    $freshness = Test-TripwireBaselineFreshness -Baseline $Baseline -AsOf $at -Policy $Policy
+    if ($freshness.Stale) {
+        return New-TripwireSignal -Name 'OffHours' -Weight $weight -Available $false -Rationale (
+            'This hour cannot be compared with the tenant norm: {0}' -f $freshness.Reason)
     }
 
     $hour = $at.Hour

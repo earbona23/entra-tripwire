@@ -58,6 +58,24 @@ function Get-TripwireBaseline {
         if ($null -eq $loaded) {
             Write-TripwireLog -Level 'Warn' -Message "No baseline at $Path. Origin and off-hours signals will be WITHHELD and every trip marked degraded. Run Get-TripwireBaseline -Build -Save."
         }
+        elseif (-not $Demo) {
+            # Said at load time, against the clock, because this is the moment the operator
+            # is looking. The scoring engine asks the same question again per touch and
+            # against the touch's own time, which is the one that decides whether a signal
+            # is withheld; the default policy is used here because loading a baseline is not
+            # a scoring call and carries no -Policy.
+            #
+            # Skipped for -Demo: those fixtures are deliberately frozen in 2026-06, so an
+            # age measured against today's date would be an artefact of the calendar rather
+            # than a fact about a tenant.
+            $freshness = Test-TripwireBaselineFreshness -Baseline $loaded -AsOf $null -Policy (Get-TripwirePolicy)
+            if ($freshness.Stale) {
+                Write-TripwireLog -Level 'Warn' -Message "The baseline at $Path is NOT usable as it stands: $($freshness.Reason) Origin and off-hours will be WITHHELD and every trip marked degraded until it is rebuilt."
+            }
+            elseif ($freshness.Warn) {
+                Write-TripwireLog -Level 'Warn' -Message ("The baseline at {0} is {1:N1} day(s) old. It is still being used, but 'unusual country' and 'outside working hours' are measured against the tenant as it was then. Rebuild it with Get-TripwireBaseline -Build -Save." -f $Path, $freshness.AgeDays)
+            }
+        }
         return $loaded
     }
 

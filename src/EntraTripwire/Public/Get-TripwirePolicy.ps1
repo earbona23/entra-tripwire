@@ -21,6 +21,11 @@
     The weights sum to 1.00, so confidence is a percentage of the maximum obtainable
     evidence and two deployments' scores mean the same thing.
 
+    BaselineWarnAgeDays (15) and BaselineStaleAgeDays (30) govern how long the tenant
+    baseline is believed. Past the stale age the origin and off-hours signals withhold
+    themselves instead of scoring a touch against a tenant that has moved on; the reasoning
+    for both numbers is in the body of this function and in docs/scoring.md.
+
     Two invariants fall out of these numbers and are enforced by tests:
 
       * No single signal can reach the High band alone (max single = 40 < 75). One
@@ -105,6 +110,30 @@ function Get-TripwirePolicy {
         # Planting a decoy makes the planter touch it. Without this the first run of every
         # deployment pages somebody.
         ProvisioningGraceMinutes = 15
+
+        # How long a baseline describes the tenant it was built from. Past the warning age
+        # the operator is told to rebuild it; past the stale age the two signals that
+        # compare a touch against tenant history -- origin anomaly and off hours -- are
+        # WITHHELD rather than scored against a tenant that no longer exists.
+        #
+        # 15 days to warn, which is half the stale age: notice is given at the point where
+        # more of the baseline's believable life is behind it than ahead of it, and that
+        # leaves a fortnight to rebuild before two signals start being withheld. A warning
+        # at a week was the first calibration here and it was wrong for this module's own
+        # reasons -- an operator who rebuilds monthly would see it three weeks in four, and
+        # a message that is nearly always on is a message that gets filtered out.
+        #
+        # 30 days to withhold, because that is how long Entra retains sign-in logs on P1/P2
+        # and it is also the default -Days of a build. A baseline older than that summarises
+        # a period the tenant can no longer produce the evidence for: not one of the
+        # sign-ins behind it is still in the log. A deployment that builds with a shorter
+        # -Days should lower this to match, since its baseline describes less.
+        #
+        # Age is measured against the TOUCH being scored, not against the clock, so
+        # re-analysing last month's logs compares them with the baseline that was current
+        # for them, and the demo fixtures do not rot.
+        BaselineWarnAgeDays = 15
+        BaselineStaleAgeDays = 30
     }
 
     if ($Override) {

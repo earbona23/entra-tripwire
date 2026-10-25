@@ -91,6 +91,13 @@ Describe 'A record with no usable timestamp' {
     BeforeEach {
         $script:Decoys = @(New-TestDecoy)
         $script:Baseline = New-TestBaseline
+        # A touch with no timestamp has no position in time, so the baseline's age for it is
+        # measured against the clock rather than against the touch. Pinned current here on
+        # purpose: with a fixed date in the fixture, these tests would quietly stop
+        # exercising the no-timestamp guard the day the fixture passed the stale age -- the
+        # signal would be withheld for being stale instead, the assertions would still pass,
+        # and scripts/mutation-test.ps1 reported exactly that as a surviving mutant.
+        $script:Baseline.generatedAt = [DateTime]::UtcNow.AddDays(-1).ToString('o')
         $script:Good = New-TestTouch -Id 'good-1' -Timestamp '2026-06-15T03:00:00Z' -Country 'KP'
         $script:NoTime = New-TestTouch -Id 'no-time'
         $script:NoTime.timestamp = $null
@@ -388,5 +395,550 @@ Describe 'The read gateway follows paging and never reports a partial read as co
 
     It 'will not accept a page limit of zero, which would fetch nothing and report success' {
         { & $script:Module { Invoke-TripwireGraphRequest -Uri '/v1.0/auditLogs/signIns' -MaxPages 0 } } | Should -Throw
+    }
+}
+
+<#
+    A baseline is a JSON file the documentation tells the operator to edit by hand -- the
+    suppression allowlist lives in it, and so does every count the origin and off-hours
+    signals divide by. So every number in it can arrive as a word, and the casts that read
+    them ([int], [double], and the [double] parameter binding in Get-TripwireDistanceKm)
+    all throw on one.
+
+    They throw INSIDE A SIGNAL, which is the worst place available: scoring runs per touch
+    inside Invoke-TripwireAnalysis, so one bad character aborted the whole batch and a run
+    that found intrusions returned nothing. Nothing is what a quiet tenant returns.
+#>
+Describe 'A hand-edited baseline' {
+
+    BeforeEach {
+        $script:Decoy = New-TestDecoy
+        $script:Touch = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'US' -Asn '7922'
+    }
+
+    It 'withholds the origin signal rather than crashing when totalSignIns is not a number' {
+        $b = New-TestBaseline
+        $b.totalSignIns = 'lots'
+        { Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b | Out-Null } |
+            Should -Not -Throw
+        $trip = Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b
+        $trip.Withheld | Should -Contain 'OriginAnomaly'
+        ($trip.Signals | Where-Object Name -eq 'OriginAnomaly').Rationale | Should -Match 'not a number'
+    }
+
+    # The direction is the whole point. An ABSENT country means the tenant has never been
+    # seen there and scores the full anomaly; a country whose count is corrupt means
+    # nothing is known. Scoring the second as the first manufactures evidence out of a typo.
+    It 'does not score an unreadable country count as a country never seen' {
+        $b = New-TestBaseline -Countries @{ US = 'many'; CA = 50 }
+        $trip = Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b
+        $signal = $trip.Signals | Where-Object Name -eq 'OriginAnomaly'
+        $signal.Available | Should -BeFalse
+        $signal.Raw | Should -Be 0
+        $signal.Rationale | Should -Match "count for country 'US'"
+    }
+
+    It 'does not score an unreadable autonomous-system count as one never seen' {
+        $b = New-TestBaseline -Asns @{ '7922' = 'plenty' }
+        $trip = Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b
+        ($trip.Signals | Where-Object Name -eq 'OriginAnomaly').Available | Should -BeFalse
+    }
+
+    # A real finding still stands: the score is a floor, and an unreadable second component
+    # could only have raised it. What must never happen is reporting a NORMAL origin on the
+    # strength of a comparison nobody could make.
+    It 'still reports an unseen country when it is the other component that is unreadable' {
+        $b = New-TestBaseline -Countries @{ US = 940 } -Asns @{ '7922' = 'plenty' }
+        $t = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '7922'
+        $signal = (Measure-TripwireConfidence -Touch $t -Decoy $script:Decoy -Baseline $b).Signals |
+            Where-Object Name -eq 'OriginAnomaly'
+        $signal.Available | Should -BeTrue
+        $signal.Raw | Should -Be 1.0
+    }
+
+    It 'withholds the off-hours signal rather than crashing on a histogram bucket that is a word' {
+        # Built by hand rather than through New-TestBaseline, whose -Hours is [int[]] and
+        # would reject the very value a JSON file on disk can hold.
+        $b = New-TestBaseline
+        $b.hourHistogram = @(2, 1, 1, 'three', 1, 2, 5, 20, 60, 85, 95, 100, 98, 99, 100, 95, 80, 50, 25, 10, 6, 4, 3, 2)
+        { Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b | Out-Null } |
+            Should -Not -Throw
+        $trip = Measure-TripwireConfidence -Touch $script:Touch -Decoy $script:Decoy -Baseline $b
+        $trip.Withheld | Should -Contain 'OffHours'
+        ($trip.Signals | Where-Object Name -eq 'OffHours').Rationale | Should -Match 'not a number'
+    }
+
+    # Get-TripwireDistanceKm binds its coordinates to [double], so a latitude of 'north'
+    # throws during PARAMETER BINDING -- before any guard inside that function can run.
+    It 'survives a last-seen position whose coordinates are not numbers' {
+        $b = New-TestBaseline -ActorLastSeen @{
+            'actor-1' = @{ timestamp = '2026-06-15T01:00:00Z'; country = 'US'; latitude = 'north'; longitude = 'west' }
+        }
+        $t = New-TestTouch -Timestamp '2026-06-15T03:20:00Z' -Country 'US' -Asn '7922' -Latitude 50.1109 -Longitude 8.6821
+        { Measure-TripwireConfidence -Touch $t -Decoy $script:Decoy -Baseline $b | Out-Null } | Should -Not -Throw
+        $signal = (Measure-TripwireConfidence -Touch $t -Decoy $script:Decoy -Baseline $b).Signals |
+            Where-Object Name -eq 'OriginAnomaly'
+        # The country and ASN are still judged; only impossible travel is unavailable.
+        $signal.Available | Should -BeTrue
+        $signal.Rationale | Should -Not -Match 'Impossible travel'
+    }
+
+    It 'does not take the rest of the batch down with one corrupt baseline field' {
+        $b = New-TestBaseline
+        $b.totalSignIns = 'lots'
+        $touches = @(
+            New-TestTouch -Id 'a' -DecoyId 'decoy-1' -Timestamp '2026-06-15T14:00:00Z'
+            New-TestTouch -Id 'b' -DecoyId 'decoy-1' -Timestamp '2026-06-15T14:05:00Z'
+        )
+        $trips = @(Invoke-TripwireAnalysis -Touch $touches -Decoy @(New-TestDecoy -Id 'decoy-1') -Baseline $b)
+        $trips.Count | Should -Be 2
+    }
+}
+
+<#
+    Collection, and the failure that looks like good news.
+
+    The old read asked for the whole window in one chain of pages, filtered client-side,
+    and stopped at the page limit with a warning. On a tenant with -Days 30 that is up to
+    200,000 records a source: past the limit the run reports fewer touches than happened.
+
+    The stub below serves one record per request and declares a window "dense" -- paging
+    forever -- when it is longer than ETW_DENSE_MINUTES, which is how a busy span is
+    simulated without generating one.
+#>
+Describe 'Collection reads its whole window, or says which part it did not' {
+
+    BeforeEach {
+        Remove-Item Env:\ETW_DENSE_MINUTES, Env:\ETW_REJECT -ErrorAction SilentlyContinue
+        . $script:Module {
+            $script:TestUris = [System.Collections.Generic.List[string]]::new()
+            function Start-Sleep { param([int] $Seconds, [int] $Milliseconds) }
+            function Invoke-MgGraphRequest {
+                param([string] $Method, [string] $Uri, $Body, $OutputType, $ErrorAction)
+                $script:TestUris.Add($Uri)
+
+                if ($env:ETW_REJECT -and $Uri -match [regex]::Escape($env:ETW_REJECT)) {
+                    $ex = [System.Exception]::new('Invalid filter clause specified for property')
+                    $err = [System.Management.Automation.ErrorRecord]::new($ex, 'BadRequest', 'NotSpecified', $null)
+                    $err.Exception | Add-Member -NotePropertyName Response `
+                        -NotePropertyValue ([pscustomobject]@{ StatusCode = 400 }) -Force
+                    throw $err
+                }
+
+                $minutes = 0.0
+                if ($Uri -match '\sge\s(\S+)\sand\s\S+\slt\s([^\s&]+)') {
+                    $minutes = ([DateTime]::Parse($Matches[2]).ToUniversalTime() -
+                        [DateTime]::Parse($Matches[1]).ToUniversalTime()).TotalMinutes
+                }
+                $dense = if ($env:ETW_DENSE_MINUTES) { [double] $env:ETW_DENSE_MINUTES } else { -1 }
+
+                $n = $script:TestUris.Count
+                $record = if ($Uri -match 'signIns') {
+                    [pscustomobject]@{
+                        id                     = "si-$n"
+                        createdDateTime        = '2026-06-15T14:00:00Z'
+                        userId                 = 'obj-decoy-1'
+                        userPrincipalName      = 'svc-decoy@contoso.com'
+                        userDisplayName        = 'svc-decoy'
+                        appId                  = 'app-unrelated'
+                        appDisplayName         = 'Office 365 Exchange Online'
+                        ipAddress              = '203.0.113.5'
+                        autonomousSystemNumber = '7922'
+                        status                 = [pscustomobject]@{ errorCode = 0 }
+                        location               = [pscustomobject]@{ countryOrRegion = 'US' }
+                    }
+                }
+                else {
+                    [pscustomobject]@{
+                        id = "au-$n"; activityDateTime = '2026-06-15T14:00:00Z'
+                        activityDisplayName = 'Read user'; result = 'success'
+                        targetResources = @(); initiatedBy = $null
+                    }
+                }
+
+                $result = @{ value = @($record) }
+                if ($dense -ge 0 -and $minutes -gt $dense) { $result['@odata.nextLink'] = $Uri }
+                return [pscustomobject]$result
+            }
+        }
+    }
+
+    AfterEach {
+        Remove-Item Env:\ETW_DENSE_MINUTES, Env:\ETW_REJECT -ErrorAction SilentlyContinue
+        . $script:Module { Remove-Item Function:\Start-Sleep -ErrorAction SilentlyContinue }
+        Install-GraphStub -Module $script:Module
+    }
+
+    # Truncation has to be DATA. A caller that recovers from it by halving the window
+    # cannot branch on a warning without matching its text, and matching the text of a log
+    # line is a dependency that breaks the first time somebody rewords it.
+    It 'reports truncation as a flag the caller can branch on' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $uri = '/v1.0/auditLogs/signIns?$filter=createdDateTime ge 2026-06-14T00:00:00Z and createdDateTime lt 2026-06-15T00:00:00Z'
+        $flag = & $script:Module {
+            param($u)
+            $t = $false
+            $null = Invoke-TripwireGraphRequest -Uri $u -MaxPages 1 -Truncated ([ref] $t) -WarningAction SilentlyContinue
+            $t
+        } $uri
+        $flag | Should -BeTrue
+    }
+
+    # Assigned on every read, not only on a truncated one: a $true left over from a
+    # previous call would otherwise read as this call's verdict, and the caller would
+    # bisect a window it had already read in full.
+    It 'clears the flag on a read that ran to the end' {
+        $env:ETW_DENSE_MINUTES = '99999'
+        $uri = '/v1.0/auditLogs/signIns?$filter=createdDateTime ge 2026-06-14T00:00:00Z and createdDateTime lt 2026-06-15T00:00:00Z'
+        $flag = & $script:Module {
+            param($u)
+            $t = $true
+            $null = Invoke-TripwireGraphRequest -Uri $u -MaxPages 5 -Truncated ([ref] $t)
+            $t
+        } $uri
+        $flag | Should -BeFalse
+    }
+
+    It 'bisects a window that hits the page limit and reads both halves' {
+        $env:ETW_DENSE_MINUTES = '400'
+        $read = & $script:Module {
+            Read-TripwireLogWindow -Path '/v1.0/auditLogs/directoryAudits' -TimeField 'activityDateTime' `
+                -Since ([DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime()) `
+                -Until ([DateTime]::Parse('2026-06-15T00:00:00Z').ToUniversalTime()) `
+                -MaxPagesPerWindow 2 -WarningAction SilentlyContinue
+        }
+        # 1440 minutes is dense, 720 is dense, 360 is not: four windows read in full.
+        $read.Complete | Should -BeTrue
+        @($read.IncompleteWindows).Count | Should -Be 0
+        @($read.Records).Count | Should -Be 4
+        $read.WindowsRead | Should -Be 7
+    }
+
+    # Half-open windows, `ge start and lt end`. Overlapping slices double every record in
+    # the overlap; slices with a gap lose every record in the gap, and the gap is invisible.
+    It 'tiles the window exactly: the slices neither overlap nor leave a gap' {
+        $env:ETW_DENSE_MINUTES = '400'
+        $null = & $script:Module {
+            Read-TripwireLogWindow -Path '/v1.0/auditLogs/directoryAudits' -TimeField 'activityDateTime' `
+                -Since ([DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime()) `
+                -Until ([DateTime]::Parse('2026-06-15T00:00:00Z').ToUniversalTime()) `
+                -MaxPagesPerWindow 2 -WarningAction SilentlyContinue
+        }
+        $spans = [System.Collections.Generic.List[object]]::new()
+        foreach ($u in (& $script:Module { @($script:TestUris) })) {
+            if ($u -match '\sge\s(\S+)\sand\s\S+\slt\s([^\s&]+)') {
+                $start = [DateTime]::Parse($Matches[1]).ToUniversalTime()
+                $end = [DateTime]::Parse($Matches[2]).ToUniversalTime()
+                if (($end - $start).TotalMinutes -eq 360) { $spans.Add([pscustomobject]@{ Start = $start; End = $end }) }
+            }
+        }
+        $leaves = @($spans | Sort-Object Start -Unique)
+        $leaves.Count | Should -Be 4
+        $leaves[0].Start | Should -Be ([DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime())
+        $leaves[3].End | Should -Be ([DateTime]::Parse('2026-06-15T00:00:00Z').ToUniversalTime())
+        for ($i = 1; $i -lt $leaves.Count; $i++) {
+            $leaves[$i].Start | Should -Be $leaves[$i - 1].End -Because 'a gap between two slices loses every record in it, invisibly'
+        }
+    }
+
+    It 'names the windows it could not read instead of returning a partial read as a whole one' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $read = & $script:Module {
+            Read-TripwireLogWindow -Path '/v1.0/auditLogs/directoryAudits' -TimeField 'activityDateTime' `
+                -Since ([DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime()) `
+                -Until ([DateTime]::Parse('2026-06-15T00:00:00Z').ToUniversalTime()) `
+                -MaxPagesPerWindow 1 -MinWindowMinutes 720 -WarningAction SilentlyContinue
+        }
+        $read.Complete | Should -BeFalse
+        @($read.IncompleteWindows).Count | Should -Be 2
+        (@($read.IncompleteWindows) -join ' ') | Should -Match '2026-06-14T00:00:00Z\.\.2026-06-14T12:00:00Z'
+    }
+
+    # Bisection is bounded, because an unbounded one turns one run into a request storm
+    # against a tenant. The bound has the same obligation as the page limit it replaced:
+    # whatever is still queued when it is reached is UNREAD, and every one of them is named.
+    It 'names every window still queued when it stops issuing requests' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $read = & $script:Module {
+            Read-TripwireLogWindow -Path '/v1.0/auditLogs/directoryAudits' -TimeField 'activityDateTime' `
+                -Since ([DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime()) `
+                -Until ([DateTime]::Parse('2026-06-15T00:00:00Z').ToUniversalTime()) `
+                -MaxPagesPerWindow 1 -MaxWindows 3 -WarningAction SilentlyContinue
+        }
+        $read.Complete | Should -BeFalse
+        $read.WindowsRead | Should -Be 3
+        # Three reads, each splitting in two: four windows are left on the queue.
+        @($read.IncompleteWindows).Count | Should -Be 4
+    }
+
+    It 'refuses a window that cannot contain anything rather than reporting a complete read of it' {
+        {
+            & $script:Module {
+                $at = [DateTime]::Parse('2026-06-14T00:00:00Z').ToUniversalTime()
+                Read-TripwireLogWindow -Path '/v1.0/auditLogs/signIns' -TimeField 'createdDateTime' -Since $at -Until $at
+            }
+        } | Should -Throw -ExpectedMessage '*cannot contain anything*'
+    }
+
+    # The loudness is the fix. A partial read was already warned about and the warning sat
+    # among the other log lines of a run that returned trips and looked successful.
+    It 'reports an unread window from Watch-TripwireActivity as an ERROR, not one more log line' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $errors = @()
+        $null = Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+            -MaxPagesPerWindow 1 -MinWindowMinutes 720 `
+            -ErrorVariable errors -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+        ($errors -join ' ') | Should -Match 'did not read its whole window'
+        ($errors -join ' ') | Should -Match 'NOT in this result'
+    }
+
+    # Zero touches from a window that was never read is THE failure that looks like good
+    # news, so the message cannot live inside the branch that only runs when trips exist.
+    It 'says so even when the run found nothing, which is when it matters most' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $errors = @()
+        $trips = @(Watch-TripwireActivity -Days 1 `
+                -Decoy @(New-TestDecoy -ObjectId 'matches-nothing' -DisplayName 'matches-nothing-either') `
+                -Baseline (New-TestBaseline) -MaxPagesPerWindow 1 -MinWindowMinutes 720 `
+                -ErrorVariable errors -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)
+        $trips.Count | Should -Be 0
+        ($errors -join ' ') | Should -Match 'did not read its whole window'
+    }
+
+    It 'downgrades the error to a warning only when the operator asks for a partial view' {
+        $env:ETW_DENSE_MINUTES = '0'
+        $errors = @()
+        $warnings = @()
+        $null = Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+            -MaxPagesPerWindow 1 -MinWindowMinutes 720 -AcceptPartialRead `
+            -ErrorVariable errors -ErrorAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        @($errors).Count | Should -Be 0
+        ($warnings -join ' ') | Should -Match 'did not read its whole window'
+    }
+
+    It 'says nothing of the sort when it did read the whole window' {
+        $env:ETW_DENSE_MINUTES = '99999'
+        $errors = @()
+        $null = Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+            -ErrorVariable errors -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+        @($errors).Count | Should -Be 0
+    }
+}
+
+<#
+    The sign-in side is narrowed server-side, because the decoy inventory is local and
+    known. That is where the 200,000 records go away. It is also where a decoy could
+    silently stop being watched, so every test here is about the filter being COMPLETE
+    rather than about it being small.
+#>
+Describe 'The sign-in query is built from the local decoy inventory' {
+
+    It 'names every identifier the sign-in matcher compares against' {
+        $decoys = @(
+            New-TestDecoy -Id 'd1' -DisplayName 'svc-one' -ObjectId 'obj-1'
+            New-TestDecoy -Id 'd2' -DisplayName 'svc-two' -ObjectId 'obj-2'
+        )
+        $f = & $script:Module { param($d) Get-TripwireDecoyFilterGroup -Decoy $d } $decoys
+        $f.Complete | Should -BeTrue
+        $joined = (@($f.Groups) -join ' ')
+        foreach ($expected in @('obj-1', 'obj-2', 'svc-one%40contoso.com', 'svc-two%40contoso.com', 'svc-one', 'svc-two')) {
+            $joined | Should -BeLike "*$expected*" -Because "a decoy the filter does not name is a decoy that stops tripping"
+        }
+    }
+
+    It 'never mixes two fields in one OR group' {
+        $decoys = @(New-TestDecoy -Id 'd1' -ObjectId 'obj-1')
+        $f = & $script:Module { param($d) Get-TripwireDecoyFilterGroup -Decoy $d } $decoys
+        foreach ($group in $f.Groups) {
+            @($group -split ' or ' | ForEach-Object { ($_ -split ' ')[0] } | Sort-Object -Unique).Count | Should -Be 1
+        }
+    }
+
+    # A guest UPN contains '#'. Unescaped, it truncates the request URI at the fragment --
+    # the query still succeeds, and that decoy's clause is simply not in it.
+    It 'escapes a value that would otherwise cut the request URI in half' {
+        $d = New-TestDecoy -Id 'd1' -ObjectId 'obj-1'
+        $d.upn = 'guest_fabrikam.com#EXT#@contoso.onmicrosoft.com'
+        $f = & $script:Module { param($dd) Get-TripwireDecoyFilterGroup -Decoy $dd } @($d)
+        $joined = (@($f.Groups) -join ' ')
+        $joined | Should -Not -Match '#EXT#'
+        $joined | Should -Match '%23EXT%23'
+    }
+
+    It 'escapes an embedded quote rather than letting it close the literal' {
+        $d = New-TestDecoy -Id 'd1' -ObjectId "obj'1"
+        $f = & $script:Module { param($dd) Get-TripwireDecoyFilterGroup -Decoy $dd } @($d)
+        (@($f.Groups) -join ' ') | Should -Match "obj%27%271"
+    }
+
+    It 'splits a large inventory into several queries rather than one Graph may refuse' {
+        $decoys = @(1..20 | ForEach-Object { New-TestDecoy -Id "d$_" -DisplayName "svc-$_" -ObjectId "obj-$_" })
+        $f = & $script:Module { param($d) Get-TripwireDecoyFilterGroup -Decoy $d } $decoys
+        $f.Complete | Should -BeTrue
+        @($f.Groups | Where-Object { $_ -like 'userId eq*' }).Count | Should -Be 2
+        foreach ($group in $f.Groups) { @($group -split ' or ').Count | Should -BeLessOrEqual 15 }
+    }
+
+    # The one that matters. A decoy with no object id, no application id and no UPN cannot
+    # be named in a filter, so narrowing the query would stop watching it -- with no
+    # symptom at all, because a decoy that is never matched simply never trips again.
+    It 'refuses to narrow the query at all when one decoy cannot be named in it' {
+        $orphan = New-TestDecoy -Id 'd2' -DisplayName 'name-only'
+        $orphan.objectId = ''
+        $orphan.upn = ''
+        $f = & $script:Module { param($d) Get-TripwireDecoyFilterGroup -Decoy $d } @((New-TestDecoy -Id 'd1'), $orphan)
+        $f.Complete | Should -BeFalse
+        $f.Reason | Should -Match 'name-only'
+    }
+}
+
+Describe 'Narrowing the sign-in query can never cost a detection' {
+
+    BeforeEach {
+        Remove-Item Env:\ETW_REJECT -ErrorAction SilentlyContinue
+        . $script:Module {
+            $script:TestUris = [System.Collections.Generic.List[string]]::new()
+            function Invoke-MgGraphRequest {
+                param([string] $Method, [string] $Uri, $Body, $OutputType, $ErrorAction)
+                $script:TestUris.Add($Uri)
+
+                if ($env:ETW_REJECT -and $Uri -match [regex]::Escape($env:ETW_REJECT)) {
+                    $ex = [System.Exception]::new('Invalid filter clause specified for property')
+                    $err = [System.Management.Automation.ErrorRecord]::new($ex, 'BadRequest', 'NotSpecified', $null)
+                    $err.Exception | Add-Member -NotePropertyName Response `
+                        -NotePropertyValue ([pscustomobject]@{ StatusCode = 400 }) -Force
+                    throw $err
+                }
+
+                if ($Uri -notmatch 'signIns') { return [pscustomobject]@{ value = @() } }
+                return [pscustomobject]@{
+                    value = @([pscustomobject]@{
+                            id                     = 'si-1'
+                            createdDateTime        = '2026-06-15T14:00:00Z'
+                            userId                 = 'obj-decoy-1'
+                            userPrincipalName      = 'svc-decoy@contoso.com'
+                            userDisplayName        = 'svc-decoy'
+                            appId                  = 'app-unrelated'
+                            appDisplayName         = 'Office 365 Exchange Online'
+                            ipAddress              = '203.0.113.5'
+                            autonomousSystemNumber = '7922'
+                            status                 = [pscustomobject]@{ errorCode = 0 }
+                            location               = [pscustomobject]@{ countryOrRegion = 'US' }
+                        })
+                }
+            }
+        }
+    }
+
+    AfterEach {
+        Remove-Item Env:\ETW_REJECT -ErrorAction SilentlyContinue
+        Install-GraphStub -Module $script:Module
+    }
+
+    It 'asks Graph for the decoy identities instead of the whole sign-in log' {
+        $null = Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+        $signInUris = @((& $script:Module { @($script:TestUris) }) | Where-Object { $_ -match 'signIns' })
+        @($signInUris).Count | Should -BeGreaterThan 0
+        ($signInUris -join ' ') | Should -Match 'userId eq'
+    }
+
+    It 'finds the touch through the narrowed query' {
+        $trips = @(Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+                -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)
+        @($trips | Where-Object { $_.Touch.source -eq 'SignInLog' }).Count | Should -Be 1
+    }
+
+    # One record can satisfy two groups -- its userId and its UPN are both decoy keys --
+    # and the same record twice is the same incident reported twice.
+    It 'does not report the same record once per clause group that matched it' {
+        $trips = @(Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+                -ErrorAction SilentlyContinue -WarningAction SilentlyContinue)
+        @($trips | Where-Object { $_.TouchId -eq 'si-1' }).Count | Should -Be 1
+    }
+
+    # Narrowing is an optimisation. An optimisation that Graph refuses must not take the
+    # detection with it: the run falls back to the whole window and matches locally.
+    It 'falls back to the whole window when Graph refuses the filter, and STILL finds the touch' {
+        $env:ETW_REJECT = 'userId eq'
+        $warnings = @()
+        $trips = @(Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+                -ErrorAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue)
+        @($trips | Where-Object { $_.Touch.source -eq 'SignInLog' }).Count | Should -Be 1
+        ($warnings -join ' ') | Should -Match 'Falling back'
+    }
+
+    It 'reads the whole window, unnarrowed, when one decoy cannot be named in a filter' {
+        $orphan = New-TestDecoy -Id 'd2' -DisplayName 'name-only'
+        $orphan.objectId = ''
+        $orphan.upn = ''
+        $warnings = @()
+        $null = Watch-TripwireActivity -Days 1 -Decoy @((New-TestDecoy), $orphan) -Baseline (New-TestBaseline) `
+            -ErrorAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        $signInUris = @((& $script:Module { @($script:TestUris) }) | Where-Object { $_ -match 'signIns' })
+        ($signInUris -join ' ') | Should -Not -Match 'userId eq'
+        ($warnings -join ' ') | Should -Match 'cannot be narrowed server-side'
+    }
+
+    # Directory audits are the source that CANNOT be narrowed: Graph's filter over
+    # targetResources does not express "any of these N objects". A filter that pretended
+    # to would drop a decoy, so this one stays a time-window read for ever.
+    It 'never tries to name a decoy in the directory-audit query' {
+        $null = Watch-TripwireActivity -Days 1 -Decoy @(New-TestDecoy) -Baseline (New-TestBaseline) `
+            -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+        $auditUris = @((& $script:Module { @($script:TestUris) }) | Where-Object { $_ -match 'directoryAudits' })
+        @($auditUris).Count | Should -BeGreaterThan 0
+        ($auditUris -join ' ') | Should -Not -Match 'targetResources'
+        ($auditUris -join ' ') | Should -Match 'activityDateTime ge'
+    }
+}
+
+Describe 'The baseline announces its own age when it is loaded' {
+
+    BeforeAll {
+        function script:New-BaselineFile([string] $GeneratedAt) {
+            $path = Join-Path ([System.IO.Path]::GetTempPath()) ("baseline-{0}.json" -f [Guid]::NewGuid())
+            $b = New-TestBaseline
+            $b.generatedAt = $GeneratedAt
+            $b | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding utf8
+            return $path
+        }
+    }
+
+    # generatedAt has been written into every baseline this module ever produced and
+    # nothing read it, so a baseline from six months ago was used in silence.
+    It 'says a baseline past the stale age will have its signals withheld' {
+        $path = script:New-BaselineFile '2020-01-01T00:00:00Z'
+        $warnings = @()
+        $loaded = Get-TripwireBaseline -Path $path -WarningVariable warnings -WarningAction SilentlyContinue
+        $loaded | Should -Not -BeNullOrEmpty -Because 'a stale baseline is still returned; it is the operator who decides'
+        ($warnings -join ' ') | Should -Match 'WITHHELD'
+        Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    }
+
+    It 'gives notice before that, while the baseline is still being used' {
+        $path = script:New-BaselineFile ([DateTime]::UtcNow.AddDays(-20).ToString('o'))
+        $warnings = @()
+        $null = Get-TripwireBaseline -Path $path -WarningVariable warnings -WarningAction SilentlyContinue
+        ($warnings -join ' ') | Should -Match 'day\(s\) old'
+        ($warnings -join ' ') | Should -Not -Match 'WITHHELD'
+        Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    }
+
+    It 'says nothing about a baseline that is current' {
+        $path = script:New-BaselineFile ([DateTime]::UtcNow.AddDays(-1).ToString('o'))
+        $warnings = @()
+        $null = Get-TripwireBaseline -Path $path -WarningVariable warnings -WarningAction SilentlyContinue
+        @($warnings).Count | Should -Be 0
+        Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    }
+
+    # The shipped fixtures are frozen in 2026-06 on purpose, so their age against today's
+    # clock is a fact about the calendar and not about a tenant. The exception is narrow by
+    # design and this test is what keeps it narrow: it must not spread to real baselines.
+    It 'does not nag about the shipped demo fixtures' {
+        $warnings = @()
+        $null = Get-TripwireBaseline -Demo -WarningVariable warnings -WarningAction SilentlyContinue
+        @($warnings).Count | Should -Be 0
     }
 }

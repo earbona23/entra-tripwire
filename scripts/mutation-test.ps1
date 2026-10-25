@@ -29,7 +29,14 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $WorkRoot = (Join-Path ([System.IO.Path]::GetTempPath()) "entra-tripwire-mutation-$([Guid]::NewGuid().ToString('n').Substring(0,8))")
+    [string] $WorkRoot = (Join-Path ([System.IO.Path]::GetTempPath()) "entra-tripwire-mutation-$([Guid]::NewGuid().ToString('n').Substring(0,8))"),
+
+    # Run only the named mutants. Every mutant still has to be applied and killed before a
+    # change ships, and CI passes nothing here, so the gate is unchanged -- this is for
+    # working on one area without paying for the whole set, and for finishing a run that
+    # was interrupted. A filtered run says so in its summary, because a green "4 of 4
+    # killed" that reads like the whole suite is the same lie as a truncated log read.
+    [string[]] $Only = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -188,6 +195,95 @@ throw "Graph GET failed for '$next': $($_.Exception.Message)"
         To = 'if ($attempt -le $MaxRetry) {'
         Defect = 'A 403 from a missing permission is retried as if it were throttling, hiding a configuration error behind a delay.'
     }
+    # ---- Collection: the page limit, the windowed read, and the inventory-driven filter.
+    @{ Name = 'truncation-not-signalled'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = 'if ($null -ne $Truncated) { $Truncated.Value = [bool] $next }'
+        To = 'if ($null -ne $Truncated) { $Truncated.Value = $false }'
+        Defect = 'A read that stopped at the page limit tells its caller it finished, so the unread part of the window is never recovered.'
+    }
+    @{ Name = 'window-not-bisected'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = 'if ($span.TotalMinutes -gt $MinWindowMinutes -and $mid -gt $window.Start -and $mid -lt $window.End) {'
+        To = 'if ($false) {'
+        Defect = 'A window too dense to read in one go is given up on instead of split, so its records stay out of the run.'
+    }
+    @{ Name = 'unread-window-not-named'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = '        $incomplete.Add((& $label $window))'
+        To = '        $null = $window'
+        Defect = 'A window that could not be read is dropped from the accounting, so a partial read reports itself as a whole one.'
+    }
+    @{ Name = 'queued-windows-discarded'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = 'while ($pending.Count -gt 0) { $incomplete.Add((& $label $pending.Pop())) }'
+        To = '$pending.Clear()'
+        Defect = 'The windows still queued when the request ceiling is reached are thrown away instead of reported, so the ceiling becomes a silent cut-off of its own.'
+    }
+    @{ Name = 'partial-read-not-reported'; File = 'src/EntraTripwire/Public/Watch-TripwireActivity.ps1'
+        From = "            Write-Error -Message `$message -Category LimitsExceeded -ErrorId 'TripwireIncompleteRead'"
+        To = '            $null = $message'
+        Defect = 'An incompletely read window is announced quietly instead of as an error, which is how a blind run passes for a quiet tenant.'
+    }
+    @{ Name = 'signin-filter-drops-a-decoy'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = 'Complete = ($uncovered.Count -eq 0 -and $groups.Count -gt 0)'
+        To = 'Complete = $true'
+        Defect = 'A decoy that cannot be named in the server-side filter is quietly left out of the query, so it stops tripping with no symptom at all.'
+    }
+    @{ Name = 'signin-filter-unescaped'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphRequest.ps1'
+        From = '"$field eq ''$([Uri]::EscapeDataString($_.Replace("''", "''''")))''"'
+        To = '"$field eq ''$_''"'
+        Defect = 'A guest UPN containing # truncates the request URI at the fragment: the query still succeeds and that decoy is simply not in it.'
+    }
+    @{ Name = 'filter-failure-not-recovered'; File = 'src/EntraTripwire/Public/Watch-TripwireActivity.ps1'
+        From = '                $signIns = $null
+                Write-TripwireLog -Level ''Warn'' -Message "The targeted sign-in query failed'
+        To = '                $signIns = @()
+                Write-TripwireLog -Level ''Warn'' -Message "The targeted sign-in query failed'
+        Defect = 'A filter Graph refuses leaves the sign-in log unread instead of falling back to the whole window, so the whole source goes silent.'
+    }
+
+    # ---- Baseline freshness: generatedAt was written by every version and read by none.
+    @{ Name = 'baseline-staleness-ignored'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '    $stale = ($age -gt $staleAge)'
+        To = '    $stale = $false'
+        Defect = 'A baseline from six months ago is believed, so "unusual country" and "outside working hours" are scored against a tenant that no longer exists.'
+    }
+    @{ Name = 'baseline-age-unknown-assumed-fresh'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '        return & $verdict $false $true $true $null (
+            "the baseline records generatedAt as'
+        To = '        return & $verdict $false $false $false $null (
+            "the baseline records generatedAt as'
+        Defect = 'A baseline whose age cannot be established is treated as a fresh one. An age nobody can establish is not freshness.'
+    }
+    @{ Name = 'freshness-limits-null-waved-through'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '    if ($null -eq $warnAge -or $null -eq $staleAge) {'
+        To = '    if ($false) {'
+        Defect = 'A policy that lost its freshness limits decides the question by $null comparison instead of being refused, and `14 -gt $null` is $true.'
+    }
+    @{ Name = 'baseline-load-age-silent'; File = 'src/EntraTripwire/Public/Get-TripwireBaseline.ps1'
+        From = '        elseif (-not $Demo) {'
+        To = '        elseif ($false) {'
+        Defect = 'Loading a six-month-old baseline says nothing, which is how it came to be used in silence in the first place.'
+    }
+
+    # ---- Numbers read out of files an operator is told to edit by hand.
+    @{ Name = 'totalsignins-unchecked'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '    $total = ConvertTo-TripwireNumberOrNull $declaredTotal'
+        To = '    $total = [int]$declaredTotal'
+        Defect = 'A corrected totalSignIns written as a word throws from inside the origin signal and abandons every other trip in the batch.'
+    }
+    @{ Name = 'histogram-bucket-unchecked'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '        $parsed = ConvertTo-TripwireNumberOrNull $bucket'
+        To = '        $parsed = [double]$bucket'
+        Defect = 'One hour-histogram bucket that is not a number throws from the off-hours signal, per touch, and takes the run down.'
+    }
+    @{ Name = 'unreadable-count-scored-as-unseen'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '        if ($null -ne $declared -and $null -eq $seen) {'
+        To = '        if ($false) {'
+        Defect = 'A baseline country count that is corrupt is scored as a country never seen, which manufactures a full origin anomaly out of a typo.'
+    }
+    @{ Name = 'coordinates-unchecked'; File = 'src/EntraTripwire/Private/Measure-TripwireSignal.ps1'
+        From = '            -Lat1 (ConvertTo-TripwireNumberOrNull $lastSeen.latitude) `'
+        To = '            -Lat1 $lastSeen.latitude `'
+        Defect = 'A hand-edited latitude throws during parameter binding, before the distance function can guard anything.'
+    }
     @{ Name = 'write-body-unchecked'; File = 'src/EntraTripwire/Private/Invoke-TripwireGraphWrite.ps1'
         From = 'if ([string]$Body[$k] -ne [string]$expected[$k]) { $mismatch = $true; break }'
         To = '$null = $k'
@@ -216,6 +312,23 @@ Import-Module Pester -MinimumVersion 5.0.0
     if ($line -match '^PASSED=(\d+) FAILED=(\d+)$') {
         return [pscustomobject]@{ Passed = [int]$Matches[1]; Failed = [int]$Matches[2]; Raw = '' }
     }
+}
+
+# One comma-separated string is accepted as well as an array, because `pwsh -File` hands
+# every argument over as a literal string and `-Only a,b` arrives as the single element
+# 'a,b'. Without this, the guard below correctly refuses a list that looks perfectly valid.
+$Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+if ($Only.Count -gt 0) {
+    $known = @($mutants | ForEach-Object { $_.Name })
+    $unknown = @($Only | Where-Object { $known -notcontains $_ })
+    if ($unknown.Count -gt 0) {
+        # A name that matches nothing would otherwise silently narrow the run to fewer
+        # mutants than asked for, and report success for the ones it did run.
+        throw "No mutant is named: $($unknown -join ', '). Known mutants: $($known -join ', ')."
+    }
+    $mutants = @($mutants | Where-Object { $Only -contains $_.Name })
+    Write-Host "FILTERED RUN: $($mutants.Count) of $($known.Count) mutants ($($Only -join ', '))." -ForegroundColor Yellow
 }
 
 Write-Host "Staging a throwaway copy in $WorkRoot" -ForegroundColor Cyan
@@ -284,7 +397,8 @@ try {
     $notApplied = @($results | Where-Object Outcome -eq 'NOT APPLIED').Count
 
     $results | Format-Table Name, Outcome, Defect -AutoSize -Wrap | Out-String | Write-Host
-    Write-Host ("Mutants: {0}   Killed: {1}   Survived: {2}   Not applied: {3}" -f $results.Count, $killed, $survived, $notApplied)
+    $scope = if ($Only.Count -gt 0) { ' (FILTERED RUN -- not the whole set)' } else { '' }
+    Write-Host ("Mutants: {0}   Killed: {1}   Survived: {2}   Not applied: {3}{4}" -f $results.Count, $killed, $survived, $notApplied, $scope)
 
     if ($survived -gt 0 -or $notApplied -gt 0) {
         Write-Host 'Mutation testing FAILED.' -ForegroundColor Red

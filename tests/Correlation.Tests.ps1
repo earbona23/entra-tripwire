@@ -113,3 +113,42 @@ Describe 'Fan-out correlation' {
         $trips[0].Withheld | Should -Contain 'DecoyPurity'
     }
 }
+
+<#
+    The baseline's age is now read, and the question of WHERE it is announced is a usability
+    one with a security edge: a per-touch message would print once per record in a batch of
+    two thousand, and a message that floods is a message that is filtered out.
+#>
+Describe 'Baseline age is announced once per batch' {
+
+    It 'warns once for the whole batch, not once per touch' {
+        $old = New-TestBaseline
+        $old.generatedAt = '2026-05-01T00:00:00Z'
+        $touches = @(1..6 | ForEach-Object {
+                New-TestTouch -Id "t$_" -DecoyId 'decoy-1' -Timestamp ('2026-06-15T14:{0:00}:00Z' -f $_)
+            })
+        $warnings = @()
+        $null = Invoke-TripwireAnalysis -Touch $touches -Decoy $script:Decoys -Baseline $old `
+            -WarningVariable warnings -WarningAction SilentlyContinue
+        @($warnings | Where-Object { $_ -match 'baseline' }).Count | Should -Be 1
+    }
+
+    # The batch line says the signals are WITHHELD, so it has to be the stale verdict that
+    # drives it and not a guess about the calendar.
+    It 'tells the operator the whole batch was scored with those signals withheld' {
+        $old = New-TestBaseline
+        $old.generatedAt = '2026-01-01T00:00:00Z'
+        $warnings = @()
+        $trips = @(Invoke-TripwireAnalysis -Touch @(New-TestTouch -Timestamp '2026-06-15T14:00:00Z') `
+                -Decoy $script:Decoys -Baseline $old -WarningVariable warnings -WarningAction SilentlyContinue)
+        ($warnings -join ' ') | Should -Match 'WITHHELD'
+        $trips[0].Withheld | Should -Contain 'OriginAnomaly'
+    }
+
+    It 'says nothing when the baseline is current' {
+        $warnings = @()
+        $null = Invoke-TripwireAnalysis -Touch @(New-TestTouch -Timestamp '2026-06-05T14:00:00Z') `
+            -Decoy $script:Decoys -Baseline $script:Baseline -WarningVariable warnings -WarningAction SilentlyContinue
+        @($warnings | Where-Object { $_ -match 'baseline' }).Count | Should -Be 0
+    }
+}

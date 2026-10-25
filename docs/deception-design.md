@@ -83,6 +83,48 @@ Do this first. A deception deployment that pages five times in its first week is
 deployment that gets muted, and a muted detector is worse than no detector because everyone
 believes it is on.
 
+## Rebuild the baseline on a schedule
+
+The baseline is not setup; it is a consumable. Two of the four signals are statements about
+tenant history — "a country this tenant has never signed in from", "an hour this tenant barely
+works" — and a tenant hires, opens an office, changes its egress and moves a team onto nights.
+
+That has teeth now. Past `BaselineStaleAgeDays` (30, the length of Entra's sign-in retention)
+those two signals are **withheld**: every trip comes back `Degraded`, scores up to 35 points
+lower, and `Invoke-TripwireContainment` refuses it. You are told at 15 days, once when the
+baseline is loaded and once per scored batch.
+
+```powershell
+# Weekly, in the same scheduled task that runs the watch.
+Get-TripwireBaseline -Build -Days 30 -Save
+```
+
+A baseline is also refused when its `generatedAt` cannot be read, which is what happens to one
+edited by hand with the timestamp left behind. Rebuild rather than patch: the counts and the
+date have to describe the same window.
+
+## Give every decoy an object id, or the sign-in query cannot be narrowed
+
+`Watch-TripwireActivity` asks Graph for the decoy identities by name instead of reading the
+whole sign-in log, which on a tenant of any size is the difference between a few records and a
+couple of hundred thousand. It builds that filter from three fields on each decoy record:
+`objectId`, `appId` and `upn`.
+
+A decoy with none of the three cannot be named in a filter — so the narrowing is abandoned for
+**the whole source** and the window is read in full. That is deliberate: a filter that omits one
+decoy is a blind spot with no symptom, because a decoy that is never matched simply never trips
+again. The run says so:
+
+```
+WARN  The sign-in log cannot be narrowed server-side: 1 decoy record(s) carry no object id,
+      application id or UPN, so a server-side filter cannot name them: admin.legacy.
+      Reading the whole window instead, which is slower but complete.
+```
+
+A decoy in that state is worth fixing for a second reason: with no object id it can neither be
+removed by `Remove-TripwireDecoy` nor disabled by containment. `New-TripwireDecoy` warns when a
+plant comes back without one.
+
 ## Do not tell the directory which objects are decoys
 
 There is no attribute, extension property, group, or naming convention that marks a decoy as

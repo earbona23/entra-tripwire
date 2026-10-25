@@ -99,6 +99,22 @@ function Invoke-TripwireAnalysis {
         }
     }
 
+    # One advisory for the batch rather than one per touch. The signals withhold themselves
+    # quietly and carry their reason on the trip, which is right for a report and useless
+    # at a prompt: this is the line that explains why a whole run came back degraded.
+    $newest = $null
+    foreach ($entry in $entries) {
+        if ($null -ne $entry.Ticks -and ($null -eq $newest -or $entry.Ticks -gt $newest)) { $newest = $entry.Ticks }
+    }
+    $newestAt = if ($null -ne $newest) { [DateTime]::new([long]$newest, [DateTimeKind]::Utc) } else { $null }
+    $freshness = Test-TripwireBaselineFreshness -Policy $Policy -Baseline $Baseline -AsOf $newestAt
+    if ($freshness.Stale) {
+        Write-TripwireLog -Level 'Warn' -Message "The tenant baseline is being refused for this batch: $($freshness.Reason) The origin and off-hours signals are WITHHELD on every trip below, so each score is a floor rather than a measurement."
+    }
+    elseif ($freshness.Warn) {
+        Write-TripwireLog -Level 'Warn' -Message ("The tenant baseline was generated {0:N1} day(s) before the newest touch in this batch. It is still being used; rebuild it with Get-TripwireBaseline -Build -Save." -f $freshness.AgeDays)
+    }
+
     foreach ($entry in $entries) {
         Measure-TripwireConfidence -Touch $entry.Touch -Decoy $decoyById[$entry.DecoyId] `
             -Baseline $Baseline -DistinctDecoyCount $entry.Count -Policy $Policy

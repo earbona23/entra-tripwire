@@ -237,6 +237,114 @@ Describe 'Signal (d) off hours' {
     }
 }
 
+Describe 'Baseline freshness' {
+
+    <#
+        Get-TripwireBaseline has always written generatedAt and nothing read it. A baseline
+        from six months ago was used in silence, so "unusual country" and "outside working
+        hours" were scored against a tenant that had since hired, moved and changed its
+        egress. Both of those signals are exactly as meaningful as the history behind them.
+    #>
+
+    It 'WITHHOLDS origin and off-hours against a baseline older than the stale age' {
+        $old = New-TestBaseline
+        $old.generatedAt = '2026-01-01T00:00:00Z'
+        $t = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512'
+        $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $old `
+            -DistinctDecoyCount 4 -Policy $script:Policy -WarningAction SilentlyContinue
+
+        $trip.Withheld | Should -Contain 'OriginAnomaly'
+        $trip.Withheld | Should -Contain 'OffHours'
+        $trip.Degraded | Should -BeTrue
+        ($trip.Signals | Where-Object Name -eq 'OriginAnomaly').Rationale | Should -Match 'day\(s\) earlier'
+    }
+
+    # The direction matters. A stale baseline must make the engine less certain, never more:
+    # the withheld signals contribute zero and the weights are not renormalised.
+    It 'a stale baseline can only LOWER the score, never raise it' {
+        $t = New-TestTouch -Timestamp '2026-06-15T03:00:00Z' -Country 'KP' -Asn '64512'
+        $fresh = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline (New-TestBaseline) `
+            -DistinctDecoyCount 4 -Policy $script:Policy
+        $old = New-TestBaseline
+        $old.generatedAt = '2025-01-01T00:00:00Z'
+        $stale = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $old `
+            -DistinctDecoyCount 4 -Policy $script:Policy
+        $stale.Confidence | Should -BeLessThan $fresh.Confidence
+        $stale.Confidence | Should -Be 65
+    }
+
+    # Age is measured against the TOUCH, not the clock. Re-analysing last month's logs must
+    # compare them with the baseline that was current for them, and a baseline built AFTER
+    # the event covers the period the event came from, so it is not stale at all.
+    It 'measures age against the touch rather than the clock' {
+        $b = New-TestBaseline
+        $b.generatedAt = '2026-06-14T00:00:00Z'
+        $t = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
+        $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $b -Policy $script:Policy
+        $trip.Withheld | Should -Not -Contain 'OriginAnomaly'
+        $trip.Confidence | Should -Be 65
+    }
+
+    It 'does not call a baseline built after the touch stale' {
+        $b = New-TestBaseline
+        $b.generatedAt = '2026-09-01T00:00:00Z'
+        $t = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
+        $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $b -Policy $script:Policy
+        $trip.Withheld | Should -Not -Contain 'OriginAnomaly'
+        $trip.Withheld | Should -Not -Contain 'OffHours'
+    }
+
+    It 'the stale age is a limit to EXCEED: exactly the limit is still used' {
+        $b = New-TestBaseline
+        $b.generatedAt = '2026-05-16T14:00:00Z'   # exactly 30 days before the touch
+        $t = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
+        $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $b `
+            -Policy $script:Policy -WarningAction SilentlyContinue
+        $trip.Withheld | Should -Not -Contain 'OriginAnomaly'
+    }
+
+    # An age nobody can establish is not freshness. Same rule the purity signal applies to
+    # an unreadable legitimateUseCount, and the opposite of what PowerShell does for free.
+    It 'WITHHOLDS rather than assuming fresh when generatedAt cannot be read' {
+        foreach ($stamp in @($null, '', 'last Tuesday', '2026-13-45T99:99:99Z')) {
+            $b = New-TestBaseline
+            $b.generatedAt = $stamp
+            $t = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
+            $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline $b `
+                -Policy $script:Policy -WarningAction SilentlyContinue
+            $trip.Withheld | Should -Contain 'OriginAnomaly' -Because "generatedAt '$stamp' establishes no age"
+            $trip.Withheld | Should -Contain 'OffHours' -Because "generatedAt '$stamp' establishes no age"
+        }
+    }
+
+    # `145 -gt $null` is $true and `-not $null` is $true, so a policy that lost a freshness
+    # limit would answer this question by accident, in whichever direction the comparison
+    # happened to be typed. It is answered by refusing to guess.
+    It 'WITHHOLDS when the policy carries no usable freshness limits' {
+        $p = Get-TripwirePolicy -Override @{ BaselineStaleAgeDays = 'soon' }
+        $t = New-TestTouch -Timestamp '2026-06-15T14:00:00Z' -Country 'KP' -Asn '7922'
+        $trip = Measure-TripwireConfidence -Touch $t -Decoy (New-TestDecoy) -Baseline (New-TestBaseline) `
+            -Policy $p -WarningAction SilentlyContinue
+        $trip.Withheld | Should -Contain 'OriginAnomaly'
+        ($trip.Signals | Where-Object Name -eq 'OriginAnomaly').Rationale | Should -Match 'BaselineWarnAgeDays or BaselineStaleAgeDays'
+    }
+
+    It 'says nothing about freshness when there is no baseline to be fresh' {
+        $f = & $script:Module { param($p) Test-TripwireBaselineFreshness -Baseline $null -AsOf $null -Policy $p } $script:Policy
+        $f.Stale | Should -BeFalse
+        $f.Warn | Should -BeFalse
+    }
+
+    It 'warns before it withholds, so the operator gets notice rather than a surprise' {
+        $b = New-TestBaseline
+        $b.generatedAt = '2026-05-25T14:00:00Z'   # 21 days: past the warning age, inside the stale age
+        $f = & $script:Module { param($bb, $p) Test-TripwireBaselineFreshness -Baseline $bb -AsOf ([DateTime]::Parse('2026-06-15T14:00:00Z').ToUniversalTime()) -Policy $p } $b $script:Policy
+        $f.Warn | Should -BeTrue
+        $f.Stale | Should -BeFalse
+        [Math]::Round($f.AgeDays) | Should -Be 21
+    }
+}
+
 Describe 'Suppression runs before scoring' {
 
     It 'suppresses an actor on the tenant allowlist however anomalous the touch looks' {
