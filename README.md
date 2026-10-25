@@ -11,8 +11,8 @@
 [![Downloads](https://img.shields.io/powershellgallery/dt/EntraTripwire?label=installs&color=2f855a)](https://www.powershellgallery.com/packages/EntraTripwire)
 [![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-blue.svg)](LICENSE)
-[![Mutation tested](https://img.shields.io/badge/mutation-31%2F31%20killed-2f855a)](docs/scoring.md#mutation-testing)
-[![Tests](https://img.shields.io/badge/tests-152%20passing-2f855a)](#development-tests-and-mutation-testing)
+[![Mutation tested](https://img.shields.io/badge/mutation-47%2F47%20killed-2f855a)](docs/scoring.md#mutation-testing)
+[![Tests](https://img.shields.io/badge/tests-232%20passing-2f855a)](#development-tests-and-mutation-testing)
 [![Runs with no tenant](https://img.shields.io/badge/DEMO-no%20tenant%20required-0f6e6e)](#five-minutes-no-tenant)
 
 **Deception-based intrusion detection for Microsoft Entra ID.**
@@ -428,7 +428,7 @@ Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.
 pwsh ./scripts/mutation-test.ps1
 ```
 
-**152 tests across eight files.** The Graph gateways are stubbed, so every code path runs for
+**232 tests across nine files.** The Graph gateways are stubbed, so every code path runs for
 real against simulated responses — including the paths where the engine must refuse to draw a
 conclusion.
 
@@ -436,7 +436,7 @@ A green suite proves the tests ran. It does not prove they would notice if the e
 wrong, so `scripts/mutation-test.ps1` introduces one real defect at a time and requires the
 suite to go red.
 
-**31 mutants, 31 killed, 0 survived, 0 not applied.**
+**47 mutants, 47 killed, 0 survived, 0 not applied.**
 
 It reports three outcomes, not two: `Killed`, `SURVIVED`, and `NOT APPLIED`. The third exists
 because a mutation that silently fails to apply produces a green run that is identical to a

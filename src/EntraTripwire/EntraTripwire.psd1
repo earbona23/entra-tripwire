@@ -1,6 +1,6 @@
 @{
     RootModule        = 'EntraTripwire.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '2.0.0'
     GUID              = 'b6f0d3a1-5c72-4e19-9a84-3d1e7c0b25af'
 
     Author            = 'Eduard Arbona'
@@ -26,11 +26,14 @@
         'Get-TripwireDecoy'
         'Get-TripwireLicense'
         'Get-TripwirePolicy'
+        'Get-TripwireSummary'
         'Invoke-TripwireAnalysis'
         'Invoke-TripwireContainment'
         'Measure-TripwireConfidence'
         'New-TripwireDecoy'
         'Remove-TripwireDecoy'
+        'Start-EntraTripwire'
+        'Test-TripwireReadiness'
         'Watch-TripwireActivity'
     )
     CmdletsToExport   = @()
