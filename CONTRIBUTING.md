@@ -105,6 +105,33 @@ private advisory, and tells you which classes of bug this project treats as secu
 rather than usability. "The module reported clean about something it never looked at" is
 on that list.
 
+## Releasing
+
+Only a tag publishes, and only through `.github/workflows/publish.yml`. Nothing is published
+from a workstation: a `Publish-Module` run from a directory puts whatever happened to be in
+that directory on the Gallery, and leaves no way to say which commit a published version
+came from.
+
+To cut a release:
+
+1. Set `ModuleVersion` in `src/EntraTripwire/EntraTripwire.psd1`.
+2. Close the `[Unreleased]` section of `CHANGELOG.md` as `## [x.y.z] - YYYY-MM-DD`.
+3. Commit, then `git tag -a vx.y.z -m "EntraTripwire x.y.z"` and push the tag.
+
+The workflow runs the whole of CI against the tagged tree — it calls `ci.yml` rather than
+repeating it, so the release gate cannot come to check less than `main` does — and refuses to
+publish unless the tag matches `ModuleVersion`, the CHANGELOG has a section for that version,
+and the Gallery does not already have it. After publishing it waits until the Gallery
+actually serves the version, because `Publish-Module` returning without an error is not proof
+that anything was published.
+
+A published version cannot be replaced, only superseded. If a release is wrong, the fix is
+the next version.
+
+The workflow reads the Gallery key from a repository secret named `PSGALLERY_API_KEY`, and
+declares a `psgallery` environment so that a required reviewer can be added in the repository
+settings to gate the publish step without changing this file.
+
 ## Credit
 
 Your authorship is in the commit history, which is public and permanent. Substantial

@@ -1,0 +1,99 @@
+name: Publish
+
+# Publishing used to be a Publish-Module run from a workstation, so the artifact on the
+# PowerShell Gallery was whatever happened to be in a directory and no one could say which
+# commit a published version came from. This workflow makes the tag the only thing that can
+# publish, and makes it publish a clean checkout of that tag.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  # The whole of CI, run again against the tagged tree. Not a subset: a release gate that
+  # checks less than main does is a gate that lies.
+  verify:
+    name: Verify the tagged tree
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish to the PowerShell Gallery
+    runs-on: ubuntu-latest
+    needs: verify
+    # Declared so a required reviewer can be added in the repository settings without
+    # touching this file. Until one is, this changes nothing.
+    environment: psgallery
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The manifest version must equal the tag
+        shell: pwsh
+        # The one check a human doing this by hand cannot be relied on to make. Without it a
+        # v2.1.0 tag can publish a manifest that still says 2.0.0: the Gallery rejects it as a
+        # duplicate if that version exists, and silently publishes the WRONG version if it does
+        # not. Either way the tag stops meaning what it says.
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $expected = $tag -replace '^v', ''
+          $actual = (Import-PowerShellDataFile ./src/EntraTripwire/EntraTripwire.psd1).ModuleVersion
+          if ($actual -ne $expected) {
+            throw "Tag $tag expects ModuleVersion $expected, but the manifest says $actual. Nothing was published."
+          }
+          Write-Host "Tag $tag matches ModuleVersion $actual."
+
+      - name: The CHANGELOG must describe this version
+        shell: pwsh
+        # Cheap, and it catches the release cut in a hurry. A version with no entry is a
+        # version whose users cannot find out what changed.
+        run: |
+          $expected = '${{ github.ref_name }}' -replace '^v', ''
+          $changelog = Get-Content ./CHANGELOG.md -Raw
+          if ($changelog -notmatch "(?m)^##\s*\[$([regex]::Escape($expected))\]") {
+            throw "CHANGELOG.md has no '## [$expected]' section. Nothing was published."
+          }
+          Write-Host "CHANGELOG.md describes $expected."
+
+      - name: This version must not already be on the Gallery
+        shell: pwsh
+        # Turns a confusing 409 from the Gallery into a sentence, and makes a re-run of this
+        # workflow safe to do.
+        run: |
+          $expected = '${{ github.ref_name }}' -replace '^v', ''
+          $uri = "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='EntraTripwire'"
+          try { $found = @((Invoke-RestMethod -Uri $uri -TimeoutSec 60).properties.Version) }
+          catch { throw "Could not ask the Gallery which versions exist: $($_.Exception.Message). Nothing was published." }
+          if ($found -contains $expected) {
+            throw "EntraTripwire $expected is already published. A published version cannot be replaced. Nothing was published."
+          }
+          Write-Host "The Gallery does not have $expected yet. Published versions: $($found -join ', ')"
+
+      - name: Publish
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) {
+            throw 'The PSGALLERY_API_KEY secret is not set on this repository. Nothing was published.'
+          }
+          Publish-Module -Path ./src/EntraTripwire -NuGetApiKey $env:PSGALLERY_API_KEY
+
+      - name: The Gallery must actually serve it
+        shell: pwsh
+        # Publish-Module returning without an error is not proof. The artifact is.
+        run: |
+          $expected = '${{ github.ref_name }}' -replace '^v', ''
+          $uri = "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='EntraTripwire'"
+          $deadline = (Get-Date).AddMinutes(10)
+          do {
+            Start-Sleep -Seconds 20
+            try { $found = @((Invoke-RestMethod -Uri $uri -TimeoutSec 60).properties.Version) } catch { $found = @() }
+            if ($found -contains $expected) {
+              Write-Host "The Gallery serves EntraTripwire $expected."
+              exit 0
+            }
+          } while ((Get-Date) -lt $deadline)
+          throw "Published without an error, but the Gallery still does not serve $expected after ten minutes. Check it by hand before tagging again."

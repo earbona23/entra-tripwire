@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Called by publish.yml so the release gate is literally this file rather than a
+  # copy of it. A copy drifts, and the day it drifts the tag publishes against
+  # weaker checks than main does, with both workflows still green.
+  workflow_call:
 
 permissions:
   contents: read
